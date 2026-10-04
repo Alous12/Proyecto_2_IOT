@@ -1,40 +1,39 @@
+#include <Arduino.h>
+
 #include "SensorUltrasonico.h"
 
-
-SensorUltrasonico::SensorUltrasonico(uint8_t pinTrig, uint8_t pinEcho, unsigned long timeoutUs)
-    : _pinTrig(pinTrig), _pinEcho(pinEcho), _timeoutUs(timeoutUs) {
+SensorUltrasonico::SensorUltrasonico(uint8_t pinDisparo, uint8_t pinEco,
+                                   unsigned long tiempoMaximoEcoUs)
+    : _pinDisparo(pinDisparo), _pinEco(pinEco), _tiempoMaximoEcoUs(tiempoMaximoEcoUs) {
 }
 
-void SensorUltrasonico::begin() {
-    pinMode(_pinTrig, OUTPUT);
-    pinMode(_pinEcho, INPUT);
-    digitalWrite(_pinTrig, LOW);
+void SensorUltrasonico::iniciar() {
+    pinMode(_pinDisparo, OUTPUT);
+    pinMode(_pinEco, INPUT);
+    digitalWrite(_pinDisparo, LOW);
 }
 
 LecturaDistancia SensorUltrasonico::medirDistanciaCm() {
     LecturaDistancia lectura;
-    lectura.distanciaCm = 0.0f;
-    lectura.valida = false;
 
-    digitalWrite(_pinTrig, LOW);
+    digitalWrite(_pinDisparo, LOW);
     delayMicroseconds(2);
-    digitalWrite(_pinTrig, HIGH);
+    digitalWrite(_pinDisparo, HIGH);
     delayMicroseconds(10);
-    digitalWrite(_pinTrig, LOW);
+    digitalWrite(_pinDisparo, LOW);
 
-    unsigned long duracionUs = pulseIn(_pinEcho, HIGH, _timeoutUs);
-
+    const unsigned long duracionUs = pulseIn(_pinEco, HIGH, _tiempoMaximoEcoUs);
     if (duracionUs == 0) {
         return lectura;
     }
 
-    float distancia = (duracionUs * VELOCIDAD_SONIDO_CM_US) / 2.0f;
-
-    if (distancia < DISTANCIA_MIN_CM || distancia > DISTANCIA_MAX_CM) {
-        return lectura; 
+    const float distanciaCm = duracionUs * VELOCIDAD_SONIDO_CM_US / 2.0f;
+    if (distanciaCm < DISTANCIA_MINIMA_SENSOR_CM ||
+        distanciaCm > DISTANCIA_MAXIMA_SENSOR_CM) {
+        return lectura;
     }
 
-    lectura.distanciaCm = distancia;
+    lectura.distanciaCm = distanciaCm;
     lectura.valida = true;
     return lectura;
 }

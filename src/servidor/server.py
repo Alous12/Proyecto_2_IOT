@@ -1,56 +1,19 @@
-#!/usr/bin/env python3
-"""
-Servidor TCP - Proyecto 2 IoT (medidor de proximidad distribuido)
-
-Topología (según el diagrama del proyecto):
-    ESP32 + sensor ultrasónico  (TCP Client, sensor)   ---\
-                                                           >--  WiFi  --  Servidor TCP (Python)
-    ESP32 + LEDs rojo/amarillo/verde (TCP Client, actuador) -/
-
-Pila: My Protocol / TCP / IP / 802.11
-
-Protocolo de aplicación (mensajes de texto, uno por línea, terminados en '\n'):
-
-    REGISTER type=<sensor|actuator>                     Cliente  -> Servidor
-    POST distance=<cm>                                  Sensor   -> Servidor
-    SET redLed=<v>, yellowLed=<v>, greenLed=<v>         Servidor -> Actuador
-        con <v> en {on, off, blink_2, blink_4}
-
-Flujo:
-    1. Cada ESP32 se conecta y envía REGISTER con su tipo.
-    2. El sensor envía POST distance=<cm> en cada lectura.
-    3. El servidor aplica las reglas de distancia y envía SET a todos
-       los actuadores registrados.
-
-Reglas de distancia: se replican las del informe del proyecto
-(Config.h / ClasificadorDistancia.cpp):
-    - fuera de 2..200 cm o valor no numérico -> ERROR   -> todo off
-    - 2  <= d < 20 cm                        -> CERCANO -> rojo on
-    - 20 <= d < 40 cm                        -> MEDIO   -> amarillo on
-    - 40 <= d <= 200 cm                      -> LEJANO  -> verde on
-    con histéresis de 2 cm (se mantiene un estado por cada sensor).
-
-Uso:
-    python3 server.py                 # escucha en 0.0.0.0:5000
-    python3 server.py --port 8080
-"""
-
 import argparse
+import math
 import socket
 import threading
+import time
 from datetime import datetime
 
-# ---------------------------------------------------------------------------
-# Configuración de red
-# ---------------------------------------------------------------------------
-HOST_POR_DEFECTO = "0.0.0.0"   # todas las interfaces (IP del PC: 192.168.0.102)
+DIRECCION_POR_DEFECTO = "0.0.0.0"
 PUERTO_POR_DEFECTO = 5000
 CODIFICACION = "utf-8"
-TAM_BUFFER = 1024
+TAMANO_BLOQUE = 1024
+LONGITUD_MAXIMA_MENSAJE = 192
+TIEMPO_MAXIMO_SIN_LECTURAS = 3.0
+TIEMPO_MAXIMO_REGISTRO = 5.0
+TIEMPO_ESPERA_SOCKET = 0.2
 
-# ---------------------------------------------------------------------------
-# Reglas de distancia (mismos valores que src/cliente/Config.h)
-# ---------------------------------------------------------------------------
 UMBRAL_CERCA_MEDIO_CM = 20.0
 UMBRAL_MEDIO_LEJOS_CM = 40.0
 MARGEN_HISTERESIS_CM = 2.0
@@ -59,22 +22,15 @@ DISTANCIA_MAXIMA_VALIDA_CM = 200.0
 
 CERCANO, MEDIO, LEJANO, ERROR = "CERCANO", "MEDIO", "LEJANO", "ERROR"
 
-# Estado de los LEDs para cada rango -> (redLed, yellowLed, greenLed)
-# Valores permitidos por el protocolo: on, off, blink_2, blink_4
 LEDS_POR_RANGO = {
     CERCANO: ("on", "off", "off"),
-    MEDIO:   ("off", "on", "off"),
-    LEJANO:  ("off", "off", "on"),
-    ERROR:   ("off", "off", "off"),
+    MEDIO: ("off", "on", "off"),
+    LEJANO: ("off", "off", "on"),
+    ERROR: ("off", "off", "off"),
 }
-
-VALORES_LED_VALIDOS = {"on", "off", "blink_2", "blink_4"}
 TIPOS_VALIDOS = {"sensor", "actuator"}
 
 
-# ---------------------------------------------------------------------------
-# Lógica de clasificación (equivalente a ClasificadorDistancia.cpp)
-# ---------------------------------------------------------------------------
 def clasificar_por_umbrales(distancia):
     if distancia < UMBRAL_CERCA_MEDIO_CM:
         return CERCANO
@@ -84,10 +40,9 @@ def clasificar_por_umbrales(distancia):
 
 
 def clasificar_distancia(distancia, rango_anterior):
-    """distancia: float o None (lectura inválida)."""
-    if distancia is None:
+    if distancia is None or not math.isfinite(distancia):
         return ERROR
-    if distancia < DISTANCIA_MINIMA_VALIDA_CM or distancia > DISTANCIA_MAXIMA_VALIDA_CM:
+    if not DISTANCIA_MINIMA_VALIDA_CM <= distancia <= DISTANCIA_MAXIMA_VALIDA_CM:
         return ERROR
 
     if rango_anterior == CERCANO:
@@ -107,26 +62,15 @@ def clasificar_distancia(distancia, rango_anterior):
             return clasificar_por_umbrales(distancia)
         return LEJANO
 
-    # rango_anterior == ERROR (o desconocido): límites base
     return clasificar_por_umbrales(distancia)
 
 
-def construir_set(rango):
+def construir_comando_luces(rango):
     rojo, amarillo, verde = LEDS_POR_RANGO[rango]
-    for v in (rojo, amarillo, verde):
-        assert v in VALORES_LED_VALIDOS, f"Valor de LED inválido: {v}"
     return f"SET redLed={rojo}, yellowLed={amarillo}, greenLed={verde}"
 
 
-# ---------------------------------------------------------------------------
-# Parser del protocolo
-# ---------------------------------------------------------------------------
-def parsear_mensaje(linea):
-    """
-    Convierte 'POST distance = 9' o 'REGISTER type=sensor' en
-    ('POST', {'distance': '9'}). Tolera espacios alrededor de '=' y comas.
-    Devuelve (None, {}) si la línea está vacía.
-    """
+def interpretar_mensaje(linea):
     linea = linea.strip()
     if not linea:
         return None, {}
@@ -134,177 +78,253 @@ def parsear_mensaje(linea):
     partes = linea.split(None, 1)
     comando = partes[0].upper()
     argumentos = {}
-
-    if len(partes) > 1:
+    if len(partes) == 2:
         for par in partes[1].split(","):
-            if "=" not in par:
-                continue
-            clave, valor = par.split("=", 1)
-            argumentos[clave.strip().lower()] = valor.strip()
-
+            if par.count("=") != 1:
+                raise ValueError("Cada argumento debe tener una clave y un valor")
+            clave, valor = (parte.strip() for parte in par.split("=", 1))
+            clave = clave.lower()
+            if not clave or not valor or clave in argumentos:
+                raise ValueError("Argumento vacio o repetido")
+            argumentos[clave] = valor
     return comando, argumentos
 
 
-# ---------------------------------------------------------------------------
-# Servidor
-# ---------------------------------------------------------------------------
-def log(msg):
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+def registrar_evento(mensaje):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {mensaje}", flush=True)
 
 
 class Cliente:
-    def __init__(self, conn, addr):
-        self.conn = conn
-        self.addr = addr
-        self.tipo = None              # 'sensor' | 'actuator'
-        self.rango = ERROR            # estado de histéresis (solo sensores)
-        self.lock_envio = threading.Lock()
+    def __init__(self, conexion, direccion):
+        self.conexion = conexion
+        self.direccion = direccion
+        self.tipo = None
+        self.rango = ERROR
+        self.instante_conexion = time.monotonic()
+        self.ultima_lectura = None
 
     @property
     def nombre(self):
-        return f"{self.addr[0]}:{self.addr[1]}" + (f" ({self.tipo})" if self.tipo else "")
+        tipo = "actuador" if self.tipo == "actuator" else self.tipo or "sin registro"
+        return f"{self.direccion[0]}:{self.direccion[1]} ({tipo})"
 
-    def enviar(self, texto):
-        with self.lock_envio:
-            self.conn.sendall((texto + "\n").encode(CODIFICACION))
+    def enviar(self, mensaje):
+        self.conexion.sendall((mensaje + "\n").encode(CODIFICACION))
 
 
 class ServidorTCP:
-    def __init__(self, host, puerto):
-        self.host = host
+    def __init__(self, direccion, puerto, tiempo_maximo_sin_lecturas=TIEMPO_MAXIMO_SIN_LECTURAS):
+        self.direccion = direccion
         self.puerto = puerto
-        self.clientes = []                 # lista de Cliente
-        self.lock = threading.Lock()
-        self.ultimo_set = None             # se reenvía a actuadores que se registran tarde
+        self.tiempo_maximo_sin_lecturas = tiempo_maximo_sin_lecturas
+        self.clientes = []
+        self.listo = threading.Event()
+        self._bloqueo = threading.RLock()
+        self._detenido = threading.Event()
+        self._escucha = None
+        self._hilos = []
+        self._sensor_actual = None
+        self._ultima_lectura = 0.0
+        self._ultimo_comando = construir_comando_luces(ERROR)
 
-    # ---- ciclo principal -------------------------------------------------
     def iniciar(self):
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind((self.host, self.puerto))
-        srv.listen()
-        log(f"Servidor TCP escuchando en {self.host}:{self.puerto}")
         try:
-            while True:
-                conn, addr = srv.accept()
-                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                cliente = Cliente(conn, addr)
-                with self.lock:
-                    self.clientes.append(cliente)
-                log(f"Conexión nueva desde {cliente.nombre}")
-                threading.Thread(target=self.atender, args=(cliente,), daemon=True).start()
-        except KeyboardInterrupt:
-            log("Servidor detenido por el usuario")
-        finally:
-            with self.lock:
-                for c in self.clientes:
-                    try:
-                        c.conn.close()
-                    except OSError:
-                        pass
-            srv.close()
+            self._escucha = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._escucha.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._escucha.bind((self.direccion, self.puerto))
+            self.puerto = self._escucha.getsockname()[1]
+            self._escucha.listen()
+            self._escucha.settimeout(TIEMPO_ESPERA_SOCKET)
+            registrar_evento(f"Servidor TCP escuchando en {self.direccion}:{self.puerto}")
+            self.listo.set()
 
-    # ---- atención de cada cliente ---------------------------------------
+            while not self._detenido.is_set():
+                self.revisar_vigencia()
+                try:
+                    conexion, direccion = self._escucha.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    if self._detenido.is_set():
+                        break
+                    raise
+
+                conexion.settimeout(TIEMPO_ESPERA_SOCKET)
+                conexion.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                conexion.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                cliente = Cliente(conexion, direccion)
+                with self._bloqueo:
+                    if self._detenido.is_set():
+                        conexion.close()
+                        break
+                    self.clientes.append(cliente)
+                registrar_evento(f"Conexion nueva desde {cliente.nombre}")
+                hilo = threading.Thread(target=self.atender, args=(cliente,), daemon=True)
+                self._hilos = [anterior for anterior in self._hilos if anterior.is_alive()]
+                self._hilos.append(hilo)
+                hilo.start()
+        except KeyboardInterrupt:
+            registrar_evento("Servidor detenido por el usuario")
+        finally:
+            self.detener()
+            for hilo in self._hilos:
+                hilo.join(timeout=1.0)
+
+    def detener(self):
+        self._detenido.set()
+        if self._escucha is not None:
+            self._escucha.close()
+        with self._bloqueo:
+            clientes = list(self.clientes)
+        for cliente in clientes:
+            self.desconectar(cliente)
+
     def atender(self, cliente):
-        buffer = ""
+        pendiente = b""
         try:
-            while True:
-                datos = cliente.conn.recv(TAM_BUFFER)
+            while not self._detenido.is_set():
+                if cliente.tipo is None and (
+                    time.monotonic() - cliente.instante_conexion >= TIEMPO_MAXIMO_REGISTRO
+                ):
+                    registrar_evento(f"Tiempo de registro agotado: {cliente.nombre}")
+                    break
+                try:
+                    datos = cliente.conexion.recv(TAMANO_BLOQUE)
+                except socket.timeout:
+                    continue
                 if not datos:
                     break
-                buffer += datos.decode(CODIFICACION, errors="replace")
-                # Un mensaje por línea; acepta '\n' y '\r\n'
-                while "\n" in buffer:
-                    linea, buffer = buffer.split("\n", 1)
-                    self.procesar(cliente, linea.rstrip("\r"))
-        except (ConnectionResetError, OSError) as e:
-            log(f"Error con {cliente.nombre}: {e}")
+                pendiente += datos
+                while b"\n" in pendiente:
+                    linea, pendiente = pendiente.split(b"\n", 1)
+                    if len(linea) > LONGITUD_MAXIMA_MENSAJE or b"\0" in linea:
+                        raise ValueError("Mensaje demasiado largo o con caracteres nulos")
+                    self.procesar(cliente, linea.decode(CODIFICACION).rstrip("\r"))
+                if len(pendiente) > LONGITUD_MAXIMA_MENSAJE:
+                    raise ValueError("Mensaje sin terminador demasiado largo")
+        except (OSError, ValueError) as error:
+            if not self._detenido.is_set():
+                registrar_evento(f"Conexion terminada con {cliente.nombre}: {error}")
         finally:
             self.desconectar(cliente)
 
     def desconectar(self, cliente):
-        with self.lock:
-            if cliente in self.clientes:
-                self.clientes.remove(cliente)
-        try:
-            cliente.conn.close()
-        except OSError:
-            pass
-        log(f"Desconectado {cliente.nombre}")
+        with self._bloqueo:
+            if cliente not in self.clientes:
+                return
+            self.clientes.remove(cliente)
+            try:
+                cliente.conexion.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            cliente.conexion.close()
+            registrar_evento(f"Desconectado {cliente.nombre}")
+            if cliente is self._sensor_actual and not self._detenido.is_set():
+                self.invalidar_lectura("El sensor activo se desconecto")
 
-    # ---- procesamiento de comandos --------------------------------------
     def procesar(self, cliente, linea):
-        comando, args = parsear_mensaje(linea)
+        try:
+            comando, argumentos = interpretar_mensaje(linea)
+        except ValueError as error:
+            registrar_evento(f"Mensaje rechazado de {cliente.nombre}: {error}")
+            return
         if comando is None:
             return
-        log(f"<- {cliente.nombre}: {linea.strip()}")
 
-        if comando == "REGISTER":
-            self.cmd_register(cliente, args)
-        elif comando == "POST":
-            self.cmd_post(cliente, args)
-        else:
-            log(f"   Comando desconocido '{comando}' ignorado")
+        with self._bloqueo:
+            if cliente not in self.clientes:
+                return
+            if comando == "REGISTER":
+                self.registrar_cliente(cliente, argumentos)
+            elif comando == "POST":
+                self.recibir_distancia(cliente, argumentos)
+            else:
+                registrar_evento(f"Comando desconocido de {cliente.nombre}: {comando}")
 
-    def cmd_register(self, cliente, args):
-        tipo = args.get("type", "").lower()
-        if tipo not in TIPOS_VALIDOS:
-            log(f"   REGISTER con tipo inválido '{tipo}' (esperado: sensor | actuator)")
+    def registrar_cliente(self, cliente, argumentos):
+        tipo = argumentos.get("type", "").lower()
+        if set(argumentos) != {"type"} or tipo not in TIPOS_VALIDOS:
+            registrar_evento(f"Registro invalido de {cliente.nombre}")
             return
+        if cliente.tipo is not None:
+            registrar_evento(f"El cliente ya esta registrado: {cliente.nombre}")
+            return
+
         cliente.tipo = tipo
         cliente.rango = ERROR
-        log(f"   Registrado {cliente.nombre}")
+        registrar_evento(f"Registrado {cliente.nombre}")
+        if tipo == "actuator":
+            self.revisar_vigencia()
+            self.enviar_a(cliente, self._ultimo_comando)
 
-        # Si ya hay un estado calculado, el actuador lo recibe al registrarse
-        if tipo == "actuator" and self.ultimo_set:
-            self.enviar_a(cliente, self.ultimo_set)
-
-    def cmd_post(self, cliente, args):
+    def recibir_distancia(self, cliente, argumentos):
         if cliente.tipo != "sensor":
-            log("   POST ignorado: el cliente no está registrado como sensor")
+            registrar_evento(f"Medicion rechazada: {cliente.nombre} no es un sensor")
             return
 
-        texto = args.get("distance")
         try:
-            distancia = float(texto)
-        except (TypeError, ValueError):
+            distancia = float(argumentos["distance"]) if set(argumentos) == {"distance"} else None
+        except (KeyError, ValueError):
             distancia = None
-            log(f"   Distancia no numérica '{texto}', se trata como lectura inválida")
 
+        if cliente.ultima_lectura is not None and (
+            time.monotonic() - cliente.ultima_lectura >= self.tiempo_maximo_sin_lecturas
+        ):
+            cliente.rango = ERROR
         cliente.rango = clasificar_distancia(distancia, cliente.rango)
-        mensaje_set = construir_set(cliente.rango)
-        self.ultimo_set = mensaje_set
-        log(f"   Regla aplicada: {distancia} cm -> {cliente.rango}")
+        self._sensor_actual = cliente
+        self._ultima_lectura = time.monotonic()
+        cliente.ultima_lectura = self._ultima_lectura
+        self._ultimo_comando = construir_comando_luces(cliente.rango)
+        registrar_evento(f"{cliente.nombre}: {distancia} cm -> {cliente.rango}")
+        self.difundir_estado()
 
-        actuadores = self.obtener_actuadores()
-        if not actuadores:
-            log("   No hay actuadores registrados; SET no enviado")
-            return
-        for act in actuadores:
-            self.enviar_a(act, mensaje_set)
+    def revisar_vigencia(self):
+        with self._bloqueo:
+            if self._sensor_actual is not None and (
+                time.monotonic() - self._ultima_lectura >= self.tiempo_maximo_sin_lecturas
+            ):
+                self.invalidar_lectura("Se agoto el tiempo de espera de mediciones")
 
-    # ---- utilidades -----------------------------------------------------
-    def obtener_actuadores(self):
-        with self.lock:
-            return [c for c in self.clientes if c.tipo == "actuator"]
+    def invalidar_lectura(self, motivo):
+        if self._sensor_actual is not None:
+            self._sensor_actual.rango = ERROR
+        self._sensor_actual = None
+        self._ultimo_comando = construir_comando_luces(ERROR)
+        registrar_evento(motivo)
+        self.difundir_estado()
+
+    def difundir_estado(self):
+        for cliente in list(self.clientes):
+            if cliente.tipo == "actuator":
+                self.enviar_a(cliente, self._ultimo_comando)
 
     def enviar_a(self, cliente, mensaje):
         try:
             cliente.enviar(mensaje)
-            log(f"-> {cliente.nombre}: {mensaje}")
-        except OSError as e:
-            log(f"   No se pudo enviar a {cliente.nombre}: {e}")
+        except OSError as error:
+            registrar_evento(f"No se pudo enviar a {cliente.nombre}: {error}")
             self.desconectar(cliente)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Servidor TCP - Proyecto 2 IoT")
-    parser.add_argument("--host", default=HOST_POR_DEFECTO, help="IP de escucha (por defecto 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=PUERTO_POR_DEFECTO, help="Puerto TCP (por defecto 5000)")
-    a = parser.parse_args()
-    ServidorTCP(a.host, a.port).iniciar()
+def principal():
+    argumentos = argparse.ArgumentParser(description="Servidor TCP del proyecto IoT")
+    argumentos.add_argument(
+        "--direccion", "--host", default=DIRECCION_POR_DEFECTO,
+        help="Direccion de escucha; por defecto 0.0.0.0"
+    )
+    argumentos.add_argument(
+        "--puerto", "--port", type=int, default=PUERTO_POR_DEFECTO,
+        help="Puerto TCP; por defecto 5000"
+    )
+    opciones = argumentos.parse_args()
+    if not 1 <= opciones.puerto <= 65535:
+        argumentos.error("El puerto debe estar entre 1 y 65535")
+    try:
+        ServidorTCP(opciones.direccion, opciones.puerto).iniciar()
+    except OSError as error:
+        argumentos.exit(1, f"No se pudo iniciar el servidor: {error}\n")
 
 
 if __name__ == "__main__":
-    main()
+    principal()

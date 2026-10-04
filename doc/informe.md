@@ -1,3 +1,5 @@
+> **Informe histórico:** este documento describe la versión inicial con una sola placa. La arquitectura distribuida y las instrucciones actuales están en [Funcionamiento del sistema](funcionamiento.md). Las pruebas físicas de este informe corresponden a la versión anterior.
+
 # 1. Requerimientos Funcionales y No Funcionales
 
 El objeto inteligente se implementa con un microcontrolador ESP32, un sensor ultrasónico HC-SR04 y tres LEDs. Su propósito es medir la distancia hasta un objeto, clasificarla y presentar el resultado mediante una señal visual fácil de interpretar.

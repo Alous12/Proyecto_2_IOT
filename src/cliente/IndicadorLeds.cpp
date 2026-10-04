@@ -1,133 +1,132 @@
+#include <Arduino.h>
+#include <ctype.h>
+#include <string.h>
+
+#include "Config.h"
 #include "IndicadorLeds.h"
 
-void IndicadorLeds::begin() {
-    pinMode(PIN_ROJO, OUTPUT);
-    pinMode(PIN_AMARILLO, OUTPUT);
-    pinMode(PIN_VERDE, OUTPUT);
+namespace {
+
+char* recortar(char* texto) {
+    while (isspace(static_cast<unsigned char>(*texto))) {
+        ++texto;
+    }
+    char* final = texto + strlen(texto);
+    while (final > texto && isspace(static_cast<unsigned char>(final[-1]))) {
+        --final;
+    }
+    *final = '\0';
+    return texto;
+}
+
+}
+
+void IndicadorLeds::iniciar() {
+    for (int indice = 0; indice < CANTIDAD_LEDS; ++indice) {
+        pinMode(pinDe(indice), OUTPUT);
+    }
     apagarTodos();
 }
 
-void IndicadorLeds::mostrar(EstadoIndicador estado) {
-    switch (estado) {
-        case EstadoIndicador::Rojo:
-            configurar(ModoLed::Encendido, ModoLed::Apagado, ModoLed::Apagado);
-            break;
-        case EstadoIndicador::Amarillo:
-            configurar(ModoLed::Apagado, ModoLed::Encendido, ModoLed::Apagado);
-            break;
-        case EstadoIndicador::Verde:
-            configurar(ModoLed::Apagado, ModoLed::Apagado, ModoLed::Encendido);
-            break;
-        case EstadoIndicador::Error:
-            configurar(ModoLed::Apagado, ModoLed::Apagado, ModoLed::Apagado);
-            break;
-    }
-}
-
 void IndicadorLeds::configurar(ModoLed rojo, ModoLed amarillo, ModoLed verde) {
-    aplicarModo(IDX_ROJO, rojo);
-    aplicarModo(IDX_AMARILLO, amarillo);
-    aplicarModo(IDX_VERDE, verde);
+    aplicarModo(0, rojo);
+    aplicarModo(1, amarillo);
+    aplicarModo(2, verde);
 }
 
-bool IndicadorLeds::procesarComandoSet(const String& comando) {
-    String texto = comando;
-    texto.trim();
-
-    if (!texto.substring(0, 3).equalsIgnoreCase("SET")) {
+bool IndicadorLeds::procesarComando(const char* comando) {
+    if (strlen(comando) > LONGITUD_MAXIMA_MENSAJE) {
         return false;
     }
-    texto = texto.substring(3);
+
+    char copia[LONGITUD_MAXIMA_MENSAJE + 1];
+    strcpy(copia, comando);
+    char* texto = recortar(copia);
+    if (strncmp(texto, "SET", 3) != 0 ||
+        !isspace(static_cast<unsigned char>(texto[3]))) {
+        return false;
+    }
 
     ModoLed nuevosModos[CANTIDAD_LEDS];
-    for (int i = 0; i < CANTIDAD_LEDS; i++) {
-        nuevosModos[i] = _modos[i];
-    }
+    bool encontrados[CANTIDAD_LEDS] = {false, false, false};
+    char* argumento = texto + 3;
 
-    int inicio = 0;
-    while (inicio <= (int)texto.length()) {
-        int fin = texto.indexOf(',', inicio);
-        if (fin < 0) {
-            fin = texto.length();
+    while (argumento != nullptr) {
+        char* siguiente = strchr(argumento, ',');
+        if (siguiente != nullptr) {
+            *siguiente++ = '\0';
         }
 
-        String par = texto.substring(inicio, fin);
-        par.trim();
-
-        if (par.length() > 0) {
-            int igual = par.indexOf('=');
-            if (igual < 0) {
-                return false;
-            }
-
-            String nombre = par.substring(0, igual);
-            String valor = par.substring(igual + 1);
-            nombre.trim();
-            valor.trim();
-
-            int indice = indiceDeNombre(nombre);
-            ModoLed modo;
-            if (indice < 0 || !textoAModo(valor, modo)) {
-                return false;
-            }
-            nuevosModos[indice] = modo;
+        char* igual = strchr(argumento, '=');
+        if (igual == nullptr || strchr(igual + 1, '=') != nullptr) {
+            return false;
         }
+        *igual++ = '\0';
 
-        inicio = fin + 1;
+        const int indice = indiceDeNombre(recortar(argumento));
+        if (indice < 0 || encontrados[indice] ||
+            !textoAModo(recortar(igual), nuevosModos[indice])) {
+            return false;
+        }
+        encontrados[indice] = true;
+        argumento = siguiente;
     }
 
-    configurar(nuevosModos[IDX_ROJO], nuevosModos[IDX_AMARILLO], nuevosModos[IDX_VERDE]);
+    for (int indice = 0; indice < CANTIDAD_LEDS; ++indice) {
+        if (!encontrados[indice]) {
+            return false;
+        }
+    }
+
+    configurar(nuevosModos[0], nuevosModos[1], nuevosModos[2]);
     return true;
 }
 
 void IndicadorLeds::actualizar() {
-    const unsigned long ahora = millis();
-
-    for (int i = 0; i < CANTIDAD_LEDS; i++) {
-        const unsigned long medioPeriodo = medioPeriodoMs(_modos[i]);
+    const uint32_t ahora = millis();
+    for (int indice = 0; indice < CANTIDAD_LEDS; ++indice) {
+        const uint32_t medioPeriodo = medioPeriodoMs(_modos[indice]);
         if (medioPeriodo == 0) {
             continue;
         }
-        if (ahora - _ultimoCambioMs[i] >= medioPeriodo) {
-            _ultimoCambioMs[i] = ahora;
-            escribir(i, !_niveles[i]);
+        const uint32_t pasos = (ahora - _ultimoCambioMs[indice]) / medioPeriodo;
+        if (pasos > 0) {
+            _ultimoCambioMs[indice] += pasos * medioPeriodo;
+            if (pasos % 2 != 0) {
+                escribir(indice, !_niveles[indice]);
+            }
         }
     }
 }
 
-int IndicadorLeds::pinDe(int indice) {
-    switch (indice) {
-        case IDX_ROJO:
-            return PIN_ROJO;
-        case IDX_AMARILLO:
-            return PIN_AMARILLO;
-        case IDX_VERDE:
-        default:
-            return PIN_VERDE;
-    }
+uint8_t IndicadorLeds::pinDe(int indice) {
+    static const uint8_t pines[CANTIDAD_LEDS] = {
+        PIN_LED_ROJO, PIN_LED_AMARILLO, PIN_LED_VERDE
+    };
+    return pines[indice];
 }
 
-int IndicadorLeds::indiceDeNombre(const String& nombre) {
-    if (nombre.equalsIgnoreCase("redLed")) {
-        return IDX_ROJO;
+int IndicadorLeds::indiceDeNombre(const char* nombre) {
+    if (strcmp(nombre, "redLed") == 0) {
+        return 0;
     }
-    if (nombre.equalsIgnoreCase("yellowLed")) {
-        return IDX_AMARILLO;
+    if (strcmp(nombre, "yellowLed") == 0) {
+        return 1;
     }
-    if (nombre.equalsIgnoreCase("greenLed")) {
-        return IDX_VERDE;
+    if (strcmp(nombre, "greenLed") == 0) {
+        return 2;
     }
     return -1;
 }
 
-bool IndicadorLeds::textoAModo(const String& valor, ModoLed& modo) {
-    if (valor.equalsIgnoreCase("on")) {
+bool IndicadorLeds::textoAModo(const char* valor, ModoLed& modo) {
+    if (strcmp(valor, "on") == 0) {
         modo = ModoLed::Encendido;
-    } else if (valor.equalsIgnoreCase("off")) {
+    } else if (strcmp(valor, "off") == 0) {
         modo = ModoLed::Apagado;
-    } else if (valor.equalsIgnoreCase("blink_2")) {
+    } else if (strcmp(valor, "blink_2") == 0) {
         modo = ModoLed::Parpadeo2;
-    } else if (valor.equalsIgnoreCase("blink_4")) {
+    } else if (strcmp(valor, "blink_4") == 0) {
         modo = ModoLed::Parpadeo4;
     } else {
         return false;
@@ -135,27 +134,22 @@ bool IndicadorLeds::textoAModo(const String& valor, ModoLed& modo) {
     return true;
 }
 
-// blink_N = N parpadeos por segundo -> cambia de estado cada 500/N ms
-unsigned long IndicadorLeds::medioPeriodoMs(ModoLed modo) {
-    switch (modo) {
-        case ModoLed::Parpadeo2:
-            return 250;
-        case ModoLed::Parpadeo4:
-            return 125;
-        default:
-            return 0;
+uint32_t IndicadorLeds::medioPeriodoMs(ModoLed modo) {
+    if (modo == ModoLed::Parpadeo2) {
+        return 250;
     }
+    if (modo == ModoLed::Parpadeo4) {
+        return 125;
+    }
+    return 0;
 }
 
 void IndicadorLeds::aplicarModo(int indice, ModoLed modo) {
-    if (_modos[indice] == modo) {
-        return;
+    if (_modos[indice] != modo) {
+        _modos[indice] = modo;
+        _ultimoCambioMs[indice] = millis();
+        escribir(indice, modo != ModoLed::Apagado);
     }
-    _modos[indice] = modo;
-    _ultimoCambioMs[indice] = millis();
-
-    // Los parpadeos arrancan encendidos para que el cambio sea visible de inmediato
-    escribir(indice, modo != ModoLed::Apagado);
 }
 
 void IndicadorLeds::escribir(int indice, bool encendido) {
@@ -164,8 +158,8 @@ void IndicadorLeds::escribir(int indice, bool encendido) {
 }
 
 void IndicadorLeds::apagarTodos() {
-    for (int i = 0; i < CANTIDAD_LEDS; i++) {
-        _modos[i] = ModoLed::Apagado;
-        escribir(i, false);
+    for (int indice = 0; indice < CANTIDAD_LEDS; ++indice) {
+        _modos[indice] = ModoLed::Apagado;
+        escribir(indice, false);
     }
 }
