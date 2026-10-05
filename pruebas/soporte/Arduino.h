@@ -8,7 +8,6 @@ constexpr uint8_t OUTPUT = 1;
 constexpr uint8_t LOW = 0;
 constexpr uint8_t HIGH = 1;
 
-unsigned long millis();
 void pinMode(uint8_t pin, uint8_t modo);
 void digitalWrite(uint8_t pin, uint8_t nivel);
 void delayMicroseconds(unsigned int duracion);

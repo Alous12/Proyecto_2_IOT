@@ -4,13 +4,8 @@
 #include "ConfigRed.h"
 #include "IndicadorLeds.h"
 
-namespace {
-
 IndicadorLeds indicador;
 ClienteTCP cliente("actuator", IP_ACTUADOR);
-unsigned long ultimoComando = 0;
-
-}
 
 void setup() {
     Serial.begin(115200);
@@ -19,36 +14,18 @@ void setup() {
 }
 
 void loop() {
-    const bool conectado = cliente.estaConectado();
-    const bool vencido = millis() - ultimoComando >= TIEMPO_MAXIMO_SIN_COMANDOS_MS;
-    if (!conectado || vencido) {
-        indicador.apagarTodos();
-        if (conectado && vencido) {
-            cliente.desconectar();
-        }
-    }
-
-    if (cliente.actualizar()) {
-        indicador.apagarTodos();
-        ultimoComando = millis();
-    }
-
-    char mensaje[LONGITUD_MAXIMA_MENSAJE + 1];
-    for (int recibidos = 0; recibidos < 8 && cliente.recibirLinea(mensaje, sizeof(mensaje));
-         ++recibidos) {
-        if (indicador.procesarComando(mensaje)) {
-            ultimoComando = millis();
-            Serial.print("Aplicado: ");
-            Serial.println(mensaje);
-        } else {
-            Serial.println("Comando de luces invalido; se apagan los LEDs");
-            indicador.apagarTodos();
-        }
-    }
-
+    cliente.actualizar();
     if (!cliente.estaConectado()) {
-        indicador.apagarTodos();
+        indicador.mostrar(EstadoIndicador::Error);
+        delay(10);
+        return;
     }
-    indicador.actualizar();
-    delay(1);
+
+    String mensaje;
+    while (cliente.recibirLinea(mensaje)) {
+        if (indicador.procesarComando(mensaje.c_str())) {
+            Serial.println(mensaje);
+        }
+    }
+    delay(10);
 }

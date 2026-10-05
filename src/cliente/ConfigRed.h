@@ -15,8 +15,7 @@ static const IPAddress MASCARA_RED(255, 255, 255, 0);
 static const IPAddress IP_SERVIDOR(192, 168, 0, 102);
 static const uint16_t PUERTO_SERVIDOR = 5000;
 
-static const unsigned long REINTENTO_WIFI_MS = 5000;
-static const unsigned long REINTENTO_SERVIDOR_MS = 3000;
+static const unsigned long REINTENTO_CONEXION_MS = 3000;
 static const int32_t TIEMPO_MAXIMO_CONEXION_MS = 1000;
 
 #endif
