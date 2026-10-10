@@ -6,7 +6,8 @@ import unittest
 
 from src.servidor.server import (
     CERCANO, MEDIO, LEJANO, ERROR,
-    ServidorTCP, clasificar_distancia, construir_comando_luces,
+    LECTURAS_INVALIDAS_PARA_ERROR, LONGITUD_MAXIMA_MENSAJE, ControlDistancia, ServidorTCP,
+    clasificar_distancia, construir_comando_luces, interpretar_mensaje,
 )
 
 
@@ -37,6 +38,41 @@ class PruebasClasificacion(unittest.TestCase):
         self.assertEqual(construir_comando_luces(MEDIO), "SET redLed=off, yellowLed=on, greenLed=off")
         self.assertEqual(construir_comando_luces(LEJANO), "SET redLed=off, yellowLed=off, greenLed=on")
         self.assertEqual(construir_comando_luces(ERROR), "SET redLed=off, yellowLed=off, greenLed=off")
+
+    def test_interpretar_mensaje(self):
+        self.assertEqual(interpretar_mensaje("REGISTER type=sensor"), ("REGISTER", {"type": "sensor"}))
+        self.assertEqual(interpretar_mensaje("POST distance=15.27"), ("POST", {"distance": "15.27"}))
+        self.assertEqual(
+            interpretar_mensaje("SET redLed=off, yellowLed=on, greenLed=off"),
+            ("SET", {"redLed": "off", "yellowLed": "on", "greenLed": "off"}),
+        )
+        self.assertEqual(interpretar_mensaje("HOLA"), ("HOLA", {}))
+
+
+class PruebasFiltroLecturas(unittest.TestCase):
+    def test_lectura_invalida_aislada_no_cambia_el_rango(self):
+        control = ControlDistancia()
+        resultados = [control.actualizar(d) for d in (39.77, 204.12, 39.77, None, 38.91)]
+        self.assertEqual(resultados, [MEDIO] * 5)
+
+    def test_lecturas_invalidas_seguidas_pasan_a_error(self):
+        control = ControlDistancia()
+        control.actualizar(10)
+        resultados = [control.actualizar(None) for _ in range(LECTURAS_INVALIDAS_PARA_ERROR)]
+        self.assertEqual(resultados[-1], ERROR)
+        self.assertTrue(all(r == CERCANO for r in resultados[:-1]))
+
+    def test_lectura_valida_reinicia_el_conteo(self):
+        control = ControlDistancia()
+        control.actualizar(60)
+        for _ in range(5):
+            for _ in range(LECTURAS_INVALIDAS_PARA_ERROR - 1):
+                self.assertEqual(control.actualizar(None), LEJANO)
+            self.assertEqual(control.actualizar(60), LEJANO)
+
+    def test_inicia_en_error(self):
+        control = ControlDistancia()
+        self.assertEqual(control.actualizar(None), ERROR)
 
 
 class PruebasIntegracionTCP(unittest.TestCase):
@@ -87,6 +123,9 @@ class PruebasIntegracionTCP(unittest.TestCase):
         for distancia in ("invalida", "nan", "inf", "201"):
             sensor.sendall(b"POST distance=9\n")
             self.esperar_estado(actuador, CERCANO)
+            for _ in range(LECTURAS_INVALIDAS_PARA_ERROR - 1):
+                sensor.sendall(f"POST distance={distancia}\n".encode())
+                self.esperar_estado(actuador, CERCANO)
             sensor.sendall(f"POST distance={distancia}\n".encode())
             self.esperar_estado(actuador, ERROR)
             sensor.sendall(b"POST distance=21\n")
@@ -114,6 +153,19 @@ class PruebasIntegracionTCP(unittest.TestCase):
         time.sleep(3.1)
         sensor.sendall(b"POST distance=21\n")
         self.esperar_estado(actuador, CERCANO)
+
+    def test_mensajes_ajenos_al_protocolo_se_ignoran(self):
+        actuador = self.conectar("actuator")
+        self.esperar_estado(actuador, ERROR)
+        sensor = self.conectar()
+        sensor.sendall(b"POST distance=9\n")
+        sensor.sendall(b"REGISTER type=robot\nREGISTER type=sensor\nHOLA\nPOST distance=9\n")
+        self.esperar_estado(actuador, CERCANO)
+
+    def test_linea_demasiado_larga_cierra_la_conexion(self):
+        sensor = self.conectar("sensor")
+        sensor.sendall(b"x" * (LONGITUD_MAXIMA_MENSAJE + 1) + b"\n")
+        self.assertEqual(sensor.recv(1), b"")
 
 
 if __name__ == "__main__":

@@ -61,32 +61,40 @@ void comprobarIndicador() {
     exigir(niveles[PIN_LED_ROJO] == LOW && niveles[PIN_LED_AMARILLO] == LOW &&
            niveles[PIN_LED_VERDE] == LOW, "Inicio apagado");
 
-    const char* comandos[] = {
-        "SET redLed=on, yellowLed=off, greenLed=off",
-        "SET redLed=off, yellowLed=on, greenLed=off",
-        "SET redLed=off, yellowLed=off, greenLed=on",
-        "SET redLed=off, yellowLed=off, greenLed=off"
+    struct Caso {
+        const char* comando;
+        bool rojo, amarillo, verde;
     };
-    for (int estado = 0; estado < 4; ++estado) {
-        for (int repeticion = 0; repeticion < 2; ++repeticion) {
-            exigir(indicador.procesarComando(comandos[estado]), "Comando del servidor");
-            exigir(niveles[PIN_LED_ROJO] == (estado == 0) &&
-                   niveles[PIN_LED_AMARILLO] == (estado == 1) &&
-                   niveles[PIN_LED_VERDE] == (estado == 2), "Solo el LED correspondiente");
-        }
+    const Caso casos[] = {
+        {"SET redLed=on, yellowLed=off, greenLed=off", true, false, false},
+        {"SET redLed=off, yellowLed=on, greenLed=off", false, true, false},
+        {"SET redLed=off, yellowLed=off, greenLed=on", false, false, true},
+        {"SET redLed=off, yellowLed=off, greenLed=off", false, false, false},
+        {"SET greenLed=on, redLed=on, yellowLed=off", true, false, true}
+    };
+    for (const Caso& caso : casos) {
+        exigir(indicador.procesarComando(caso.comando), "Comando valido aceptado");
+        exigir(niveles[PIN_LED_ROJO] == caso.rojo &&
+               niveles[PIN_LED_AMARILLO] == caso.amarillo &&
+               niveles[PIN_LED_VERDE] == caso.verde, "LEDs segun el comando");
     }
 
+    indicador.procesarComando("SET redLed=off, yellowLed=on, greenLed=off");
     const char* invalidos[] = {
         "SET redLed=on",
-        "SET redLed=on, yellowLed=on, greenLed=off",
+        "POST distance=10",
+        "SET redLed=onn, yellowLed=off, greenLed=off",
         "SET redLed=blink_2, yellowLed=off, greenLed=off",
-        "SET redLed=blink_4, yellowLed=off, greenLed=off"
+        "SET redLed=, yellowLed=off, greenLed=off"
     };
     for (const char* comando : invalidos) {
-        exigir(!indicador.procesarComando(comando), "Rechaza estados ajenos a las reglas");
-        exigir(niveles[PIN_LED_ROJO] == LOW && niveles[PIN_LED_AMARILLO] == LOW &&
-               niveles[PIN_LED_VERDE] == LOW, "Sin cambios ante una orden invalida");
+        exigir(!indicador.procesarComando(comando), "Comando invalido rechazado");
+        exigir(niveles[PIN_LED_ROJO] == LOW && niveles[PIN_LED_AMARILLO] == HIGH &&
+               niveles[PIN_LED_VERDE] == LOW, "Sin cambios ante un comando invalido");
     }
+
+    indicador.apagar();
+    exigir(niveles[PIN_LED_AMARILLO] == LOW, "Apagar todos los LEDs");
 }
 
 int main() {

@@ -1,5 +1,4 @@
 #include "ClienteTCP.h"
-#include "Config.h"
 #include "ConfigRed.h"
 
 ClienteTCP::ClienteTCP(const char* tipo, const IPAddress& direccionLocal)
@@ -12,6 +11,11 @@ void ClienteTCP::iniciar() {
         return;
     }
     WiFi.mode(WIFI_STA);
+    // El ESP32 restablece el Wi-Fi por sí mismo; aquí solo se reintenta el TCP.
+    WiFi.setAutoReconnect(true);
+    // Sin ahorro de energía: la radio queda siempre activa, lo que reduce la
+    // latencia de los mensajes y evita picos periódicos de consumo.
+    WiFi.setSleep(false);
     if (USAR_IP_FIJA && !WiFi.config(_direccionLocal, IP_PUERTA_ENLACE, MASCARA_RED)) {
         Serial.println("No se pudo configurar la direccion IP");
         return;
@@ -31,9 +35,8 @@ void ClienteTCP::actualizar() {
         return;
     }
     _ultimoIntento = millis();
-    if (WiFi.status() != WL_CONNECTED) {
-        WiFi.reconnect();
-    } else if (_conexion.connect(IP_SERVIDOR, PUERTO_SERVIDOR, TIEMPO_MAXIMO_CONEXION_MS)) {
+    if (WiFi.status() == WL_CONNECTED &&
+        _conexion.connect(IP_SERVIDOR, PUERTO_SERVIDOR, TIEMPO_MAXIMO_CONEXION_MS)) {
         enviarLinea(String("REGISTER type=") + _tipo);
     }
 }
@@ -66,6 +69,7 @@ bool ClienteTCP::recibirLinea(String& mensaje) {
             _pendiente = "";
             return true;
         }
+        // Una línea demasiado larga indica un error de protocolo: se corta la conexión.
         if (dato == 0 || _pendiente.length() >= LONGITUD_MAXIMA_MENSAJE) {
             _conexion.stop();
             _pendiente = "";

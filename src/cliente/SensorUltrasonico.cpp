@@ -27,6 +27,7 @@ LecturaDistancia SensorUltrasonico::medirDistanciaCm() {
         return lectura;
     }
 
+    // El eco recorre la distancia de ida y vuelta, por eso se divide entre 2.
     const float distanciaCm = duracionUs * VELOCIDAD_SONIDO_CM_US / 2.0f;
     if (distanciaCm < DISTANCIA_MINIMA_SENSOR_CM ||
         distanciaCm > DISTANCIA_MAXIMA_SENSOR_CM) {

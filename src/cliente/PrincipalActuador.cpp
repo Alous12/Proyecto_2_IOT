@@ -1,3 +1,5 @@
+// Firmware del objeto actuador: recibe comandos SET del servidor y los aplica a los LEDs.
+
 #include <Arduino.h>
 
 #include "ClienteTCP.h"
@@ -16,16 +18,14 @@ void setup() {
 void loop() {
     cliente.actualizar();
     if (!cliente.estaConectado()) {
-        indicador.mostrar(EstadoIndicador::Error);
-        delay(10);
-        return;
+        // Sin servidor no hay información válida: se apagan los LEDs.
+        indicador.apagar();
     }
 
     String mensaje;
     while (cliente.recibirLinea(mensaje)) {
-        if (indicador.procesarComando(mensaje.c_str())) {
-            Serial.println(mensaje);
-        }
+        Serial.print(indicador.procesarComando(mensaje.c_str()) ? "Aplicado: " : "Ignorado: ");
+        Serial.println(mensaje);
     }
     delay(10);
 }

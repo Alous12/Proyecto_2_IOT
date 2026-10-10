@@ -12,5 +12,3 @@ python src/servidor/server.py
 ```
 
 Los entornos de PlatformIO son `sensor` y `actuador`. Cada uno se carga en una placa diferente.
-
-El [informe inicial](doc/informe.md) se conserva como documentación histórica de la versión con una sola placa.

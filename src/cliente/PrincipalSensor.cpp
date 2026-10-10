@@ -1,3 +1,5 @@
+// Firmware del objeto sensor: mide la distancia y la envía al servidor con POST.
+
 #include <Arduino.h>
 
 #include "ClienteTCP.h"
