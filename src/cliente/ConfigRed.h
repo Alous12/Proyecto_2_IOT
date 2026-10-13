@@ -6,16 +6,15 @@
 #include <stdint.h>
 
 // Configuración de la red Wi-Fi y del servidor TCP. Ajustar a la red real.
-
-static const char SSID_WIFI[] = "GAYATRI";
-static const char CLAVE_WIFI[] = "G1a2g3s4";
+static const char SSID_WIFI[] = "GUERRERO";
+static const char CLAVE_WIFI[] = "74403819";
 
 static const bool USAR_IP_FIJA = true;
 static const IPAddress IP_SENSOR(192, 168, 0, 101);
 static const IPAddress IP_ACTUADOR(192, 168, 0, 100);
 static const IPAddress IP_PUERTA_ENLACE(192, 168, 0, 1);
 static const IPAddress MASCARA_RED(255, 255, 255, 0);
-static const IPAddress IP_SERVIDOR(192, 168, 0, 26);
+static const IPAddress IP_SERVIDOR(192, 168, 0, 9);
 static const uint16_t PUERTO_SERVIDOR = 5000;
 
 static const unsigned long REINTENTO_CONEXION_MS = 3000;

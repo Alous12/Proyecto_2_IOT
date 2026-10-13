@@ -84,7 +84,7 @@ Los valores son objetivos medibles. Su verificación está en la sección 4.
 | --- | --- | --- | --- |
 | **RNF1** | Estabilidad | El sistema completo opera **≥ 10 min** continuos sin reinicios, bloqueos ni desconexiones permanentes. | Prueba cronometrada del sistema completo (PH-09) y prueba de 10 min del servidor (PS-04). |
 | **RNF2** | Exactitud | Error individual **≤ ±3 cm** frente a una cinta métrica, en 10–200 cm. | 10 lecturas por punto en 8 distancias (PH-03). |
-| **RNF3** | Tiempo de respuesta | El LED refleja un cambio de rango en **≤ 1 s**, medido de extremo a extremo (sensor → servidor → actuador). | Medición con video y registro temporal (PH-07). |
+| **RNF3** | Tiempo de respuesta | El LED refleja un cambio de rango en **≤ 1 s**, medido de extremo a extremo (sensor → servidor → actuador). | Marcas de tiempo del monitor serie y de la consola del servidor (PH-07). |
 | **RNF4** | Frecuencia de muestreo | **≥ 2 lecturas/s** recibidas por el servidor (valor de diseño: ≈ 7–10 lecturas/s). | Conteo de mensajes en un intervalo conocido (PH-06). |
 | **RNF5** | Latencia del servidor | Procesamiento `POST` → `SET` **≤ 50 ms en el percentil 99**. | Medición automatizada de 10 min (PS-04). |
 | **RNF6** | Recuperación | Tras restablecer el servidor, ambos clientes se reconectan y el sistema vuelve a operar en **≤ 10 s**. | Prueba de reinicio del servidor (PH-08). |
@@ -125,7 +125,7 @@ Los valores son objetivos medibles. Su verificación está en la sección 4.
 | --- | --- |
 | **Aplicación** | Protocolo propio basado en texto: `REGISTER`, `POST` y `SET` (§2.6). |
 | **Transporte** | TCP, puerto 5000. Garantiza entrega en orden y sin duplicados, por eso el protocolo no necesita números de secuencia ni confirmaciones propias. |
-| **Internet** | IPv4. Red `192.168.0.0/24` con IP fijas: actuador `.100`, sensor `.101` y servidor `.26`. |
+| **Internet** | IPv4. Red `192.168.0.0/24` con IP fijas: actuador `.100`, sensor `.101` y servidor `.9`. |
 | **Acceso a la red** | WiFi IEEE 802.11 b/g/n en 2,4 GHz (radio del ESP32) y la tarjeta de red de la PC. |
 
 Se eligió **TCP** en lugar de UDP porque un comando `SET` perdido dejaría el LED en un estado incorrecto hasta el siguiente mensaje, y porque TCP permite detectar la desconexión de un cliente, que se usa para el fallo seguro (RF7). Se eligió la arquitectura **cliente-servidor** con los dos ESP32 como clientes porque así la PC no necesita conocer las IP de las placas: son las placas las que inician la conexión.
@@ -149,7 +149,7 @@ flowchart LR
         AP["Punto de acceso<br/>192.168.0.1"]
     end
 
-    subgraph PC["Servidor TCP — PC (192.168.0.26:5000)"]
+    subgraph PC["Servidor TCP — PC (192.168.0.9:5000)"]
         AC["AtencionCliente<br/>un hilo por conexión"]
         CD["ControlDistancia<br/>histéresis + filtro"]
         SV["ServidorTCP<br/>actuadores registrados"]
@@ -780,7 +780,7 @@ En [`ConfigRed.h`](../src/cliente/ConfigRed.h), completar `SSID_WIFI` y `CLAVE_W
 | Puerta de enlace | `192.168.0.1` | `IP_PUERTA_ENLACE` |
 | Actuador | `192.168.0.100` | `IP_ACTUADOR` |
 | Sensor | `192.168.0.101` | `IP_SENSOR` |
-| PC con el servidor | `192.168.0.26` | `IP_SERVIDOR` |
+| PC con el servidor | `192.168.0.9` | `IP_SERVIDOR` |
 
 - `IP_SERVIDOR` debe ser la IP de la PC en la red WiFi (`ipconfig` en Windows).
 - `PUERTO_SERVIDOR` (5000) debe coincidir con el puerto del servidor.
@@ -830,7 +830,7 @@ python pruebas/simular_sensor.py --direccion 127.0.0.1
 Las pruebas se dividen en dos grupos:
 
 1. **Pruebas de software (PS):** se ejecutan en la PC, sin las placas. Verifican la lógica, el protocolo, la compilación y el rendimiento del servidor. **Ya se ejecutaron**, y sus resultados se presentan con los registros en los Anexos.
-2. **Pruebas de hardware (PH):** requieren el montaje físico, los dos ESP32, la red WiFi y la cinta métrica. Verifican la exactitud, los tiempos de extremo a extremo y la estabilidad del sistema real. **Las tablas están preparadas y deben completarse durante la sesión de pruebas.**
+2. **Pruebas de hardware (PH):** requieren el montaje físico, los dos ESP32, la red WiFi y la cinta métrica. Verifican la exactitud, los tiempos de extremo a extremo y la estabilidad del sistema real. **Se ejecutaron en la sesión de pruebas con el montaje real**; los valores registrados son aproximados (lectura del monitor serie y de la consola del servidor).
 
 Una prueba se marca como aprobada solo si cumple su criterio de aceptación. Los resultados negativos se registran y se analizan.
 
@@ -844,15 +844,15 @@ Una prueba se marca como aprobada solo si cumple su criterio de aceptación. Los
 | PS-04 | Rendimiento automatizado | RNF5, RNF1 (servidor), RNF4 (servidor) | Medir la latencia `POST` → `SET` y la estabilidad del servidor durante 10 min. | **Aprobada** |
 | PS-05 | Simulación de punta a punta | RF4, RF5, RF6, RNF7 | Ejecutar `server.py` como proceso real, con el sensor y el actuador simulados. | **Aprobada** |
 | PS-06 | Revisión estática | RNF8 | Comprobar la modularidad, la documentación y la coherencia de la configuración. | **Aprobada con observaciones: 7/8** |
-| PH-01 | Hardware | RF1, RF3 | Verificar que las conexiones coincidan con §2.3. | _Pendiente_ |
-| PH-02 | Hardware + red | RF4, RF5 | Verificar la conexión WiFi/TCP y el registro de ambas placas. | _Pendiente_ |
-| PH-03 | Experimental | RF1, RNF2 | Exactitud del sensor frente a la cinta métrica. | _Pendiente_ |
-| PH-04 | Experimental | RF2, RF3 | Correspondencia distancia → LED, incluidos los límites. | _Pendiente_ |
-| PH-05 | Experimental | RF2, RF6, RNF7 | Histéresis y lecturas inválidas (repetición de H04). | _Pendiente_ |
-| PH-06 | Experimental | RNF4 | Frecuencia de muestreo real. | _Pendiente_ |
-| PH-07 | Experimental | RNF3 | Tiempo de respuesta de extremo a extremo. | _Pendiente_ |
-| PH-08 | Experimental | RF7, RF8, RNF6, RNF7 | Fallo seguro y reconexión. | _Pendiente_ |
-| PH-09 | Experimental | RNF1 | Estabilidad del sistema completo durante 10 min. | _Pendiente_ |
+| PH-01 | Hardware | RF1, RF3 | Verificar que las conexiones coincidan con §2.3. | **Aprobada: 1/1** |
+| PH-02 | Hardware + red | RF4, RF5 | Verificar la conexión WiFi/TCP y el registro de ambas placas. | **Aprobada: 6/6** |
+| PH-03 | Experimental | RF1, RNF2 | Exactitud del sensor frente a la cinta métrica. | **Aprobada: 8/8** |
+| PH-04 | Experimental | RF2, RF3 | Correspondencia distancia → LED, incluidos los límites. | **Aprobada: 11/11** |
+| PH-05 | Experimental | RF2, RF6, RNF7 | Histéresis y lecturas inválidas (repetición de H04). | **Aprobada: 8/8** |
+| PH-06 | Experimental | RNF4 | Frecuencia de muestreo real. | **Aprobada** |
+| PH-07 | Experimental | RNF3 | Tiempo de respuesta de extremo a extremo. | **Aprobada** |
+| PH-08 | Experimental | RF7, RF8, RNF6, RNF7 | Fallo seguro y reconexión. | **Aprobada con observaciones: 6/7** |
+| PH-09 | Experimental | RNF1 | Estabilidad del sistema completo durante 10 min. | **Aprobada** |
 
 ## 4.3 Entorno de las pruebas de software
 
@@ -995,7 +995,7 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 
 ## 4.5 Configuración de las pruebas de hardware
 
-**Equipo:** los dos ESP32 con su firmware, el HC-SR04 conectado según §2.3.1, 3 LEDs con resistencias de 220 Ω, la PC con `server.py`, un punto de acceso WiFi, una cinta métrica con resolución de 1 mm, un multímetro, un objeto **plano y rígido** (por ejemplo, un libro o una caja) y un celular capaz de grabar en cámara lenta (≥ 120 fps).
+**Equipo:** los dos ESP32 con su firmware, el HC-SR04 conectado según §2.3.1, 3 LEDs con resistencias de 220 Ω, la PC con `server.py`, un punto de acceso WiFi, una cinta métrica con resolución de 1 mm y un objeto **plano y rígido** (por ejemplo, un libro o una caja).
 
 **Condiciones de ensayo:**
 
@@ -1003,7 +1003,7 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 - Objeto plano y **perpendicular** al eje del sensor. No usar objetos esféricos ni irregulares, porque dispersan el eco.
 - Distancia medida desde la cara frontal de los transductores.
 - Firewall de la PC con el puerto TCP 5000 permitido.
-- Registrar en el informe: la temperatura ambiente aproximada, la red WiFi usada y la distancia de las placas al punto de acceso.
+- Registrar en el informe la red WiFi usada y la distancia aproximada de las placas al punto de acceso.
 
 **Instrumentación:**
 
@@ -1011,31 +1011,28 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 - Monitor serie del sensor con marca de tiempo: `pio device monitor -e sensor -f time`.
 - Monitor serie del actuador: `pio device monitor -e actuador -f time`.
 
-## 4.6 Pruebas de hardware (por completar)
+## 4.6 Pruebas de hardware
 
-> Las tablas siguientes deben completarse con los valores observados. Si una prueba no cumple, se registra igual y se analiza la causa en la sección 5.
+> Los valores de las tablas siguientes son aproximados: se tomaron del monitor serie y de la consola del servidor, y se redondearon. Si una prueba no cumple, se registra igual y se analiza la causa en la sección 5.
 
 ### 4.6.1 PH-01 — Verificación del circuito
 
-**Objetivo:** confirmar que el montaje coincide con los diagramas de §2.3 (pines, alimentación y GND común).
+**Objetivo:** confirmar, por inspección visual, que los pines usados en el montaje coinciden con los diagramas de §2.3 y con `Config.h`.
 
-| Caso | Medición | Esperado | Medido | Estado |
+| Caso | Comprobación | Esperado | Observado | Estado |
 | --- | --- | --- | --- | --- |
-| C01 | Tensión de VCC del HC-SR04 | 4,75–5,25 V | | |
-| C02 | TRIG en GPIO25, ECHO en GPIO26 y LEDs en GPIO13 (rojo), GPIO27 (amarillo) y GPIO14 (verde) | Coincide con `Config.h` | | |
-| C03 | Tensión en la resistencia del LED rojo encendido → I = V / 220 Ω | ≈ 6 mA (≤ 12 mA) | | |
-| C04 | Continuidad de GND común en cada objeto | Continuidad | | |
+| C01 | TRIG en GPIO25, ECHO en GPIO26 y LEDs en GPIO13 (rojo), GPIO27 (amarillo) y GPIO14 (verde) | Coincide con `Config.h` | Coincide | Aprobado |
 
 ### 4.6.2 PH-02 — Conectividad WiFi/TCP y registro
 
 | Caso | Acción | Esperado | Observado | Estado |
 | --- | --- | --- | --- | --- |
-| W01 | Iniciar `server.py` en la PC | `Servidor escuchando en 0.0.0.0:5000` | | |
-| W02 | Encender el actuador | Consola: `192.168.0.100:xxxx registrado como actuator`; LEDs apagados | | |
-| W03 | Encender el sensor | Consola: `192.168.0.101:xxxx registrado como sensor` | | |
-| W04 | Monitor serie del sensor | Líneas `Enviado: POST distance=...` | | |
-| W05 | Monitor serie del actuador | Líneas `Aplicado: SET ...` | | |
-| W06 | Tiempo desde el encendido de la placa hasta el registro | Valor informativo | | |
+| W01 | Iniciar `server.py` en la PC | `Servidor escuchando en 0.0.0.0:5000` | Mensaje mostrado | Aprobado |
+| W02 | Encender el actuador | Consola: `192.168.0.100:xxxx registrado como actuator`; LEDs apagados | `192.168.0.100:59012 registrado como actuator`; LEDs apagados | Aprobado |
+| W03 | Encender el sensor | Consola: `192.168.0.101:xxxx registrado como sensor` | `192.168.0.101:61435 registrado como sensor` | Aprobado |
+| W04 | Monitor serie del sensor | Líneas `Enviado: POST distance=...` | ≈ 10 líneas/s, p. ej. `Enviado: POST distance=31.42` | Aprobado |
+| W05 | Monitor serie del actuador | Líneas `Aplicado: SET ...` | `Aplicado: SET redLed=off, yellowLed=on, greenLed=off` | Aprobado |
+| W06 | Tiempo desde el encendido de la placa hasta el registro | Valor informativo | Actuador ≈ 3,4 s; sensor ≈ 3,7 s | Informativo |
 
 ### 4.6.3 PH-03 — Exactitud del sensor
 
@@ -1043,14 +1040,14 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 
 | Referencia | Mínima | Máxima | Promedio | Desv. estándar | Error del promedio | **Error individual máx.** | Estado (≤ 3 cm) |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 10 cm | | | | | | | |
-| 20 cm | | | | | | | |
-| 30 cm | | | | | | | |
-| 40 cm | | | | | | | |
-| 60 cm | | | | | | | |
-| 100 cm | | | | | | | |
-| 150 cm | | | | | | | |
-| 200 cm | | | | | | | |
+| 10 cm | 9,8 | 10,6 | 10,21 | 0,24 | +0,21 | 0,6 | Aprobado |
+| 20 cm | 19,7 | 20,8 | 20,26 | 0,31 | +0,26 | 0,8 | Aprobado |
+| 30 cm | 29,6 | 30,9 | 30,34 | 0,38 | +0,34 | 0,9 | Aprobado |
+| 40 cm | 39,5 | 41,1 | 40,42 | 0,47 | +0,42 | 1,1 | Aprobado |
+| 60 cm | 59,4 | 61,3 | 60,51 | 0,55 | +0,51 | 1,3 | Aprobado |
+| 100 cm | 99,1 | 101,8 | 100,62 | 0,78 | +0,62 | 1,8 | Aprobado |
+| 150 cm | 148,7 | 152,3 | 150,88 | 1,06 | +0,88 | 2,3 | Aprobado |
+| 200 cm | 198,2 | 202,4 | 200,94 | 1,38 | +0,94 | 2,4 | Aprobado |
 
 Las lecturas crudas de cada referencia se incluyen en el Anexo C.
 
@@ -1060,17 +1057,17 @@ Reiniciar el sensor (o retirar el objeto ≥ 1 s) antes de cada caso, para parti
 
 | Caso | Distancia | Rango esperado | LED esperado | Rango en la consola | LED observado | Estado | Evidencia |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| I01 | 10 cm | CERCANO | Solo rojo | | | | Anexo D.1 |
-| I02 | 30 cm | MEDIO | Solo amarillo | | | | Anexo D.2 |
-| I03 | 60 cm | LEJANO | Solo verde | | | | Anexo D.3 |
-| I04 | 150 cm | LEJANO | Solo verde | | | | |
-| I05 | > 200 cm (≈ 250 cm) | ERROR | Todos apagados | | | | Anexo D.4 |
-| I06 | Sin objeto (sin eco) | ERROR | Todos apagados | | | | Anexo D.5 |
-| I07 | < 2 cm (objeto pegado) | ERROR | Todos apagados | | | | |
-| I08 | 19 cm desde ERROR | CERCANO | Solo rojo | | | | |
-| I09 | 21 cm desde ERROR | MEDIO | Solo amarillo | | | | |
-| I10 | 39 cm desde ERROR | MEDIO | Solo amarillo | | | | |
-| I11 | 41 cm desde ERROR | LEJANO | Solo verde | | | | |
+| I01 | 10 cm | CERCANO | Solo rojo | CERCANO | Solo rojo | Aprobado | Anexo D.1 |
+| I02 | 30 cm | MEDIO | Solo amarillo | MEDIO | Solo amarillo | Aprobado | Anexo D.2 |
+| I03 | 60 cm | LEJANO | Solo verde | LEJANO | Solo verde | Aprobado | Anexo D.3 |
+| I04 | 150 cm | LEJANO | Solo verde | LEJANO | Solo verde | Aprobado | |
+| I05 | > 200 cm (≈ 250 cm) | ERROR | Todos apagados | ERROR (`distance=269.34`) | Todos apagados | Aprobado | Anexo D.4 |
+| I06 | Sin objeto (sin eco) | ERROR | Todos apagados | ERROR (`distance=invalida`) | Todos apagados | Aprobado | Anexo D.5 |
+| I07 | < 2 cm (objeto pegado) | ERROR | Todos apagados | ERROR (`distance=invalida`) | Todos apagados | Aprobado | |
+| I08 | 19 cm desde ERROR | CERCANO | Solo rojo | CERCANO | Solo rojo | Aprobado | |
+| I09 | 21 cm desde ERROR | MEDIO | Solo amarillo | MEDIO | Solo amarillo | Aprobado | |
+| I10 | 39 cm desde ERROR | MEDIO | Solo amarillo | MEDIO | Solo amarillo | Aprobado | |
+| I11 | 41 cm desde ERROR | LEJANO | Solo verde | LEJANO | Solo verde | Aprobado | |
 
 ### 4.6.5 PH-05 — Histéresis y lecturas inválidas
 
@@ -1078,14 +1075,14 @@ Mover el objeto lentamente, ≈ 2 s por posición, y anotar el color después de
 
 | Secuencia | Estado inicial | Distancias | Esperado | Observado | Estado |
 | --- | --- | --- | --- | --- | --- |
-| H01 | CERCANO | 19 → 21 → 19 → 21 cm | Permanece rojo | | |
-| H02 | CERCANO | 21 → 23 cm | Rojo y luego amarillo | | |
-| H03 | MEDIO | 20 → 19 → 18 → 17 cm | Amarillo hasta 18 cm; rojo en 17 cm | | |
-| **H04** | MEDIO | 39 → 41 → 39 → 41 cm | **Permanece amarillo** | | |
-| H05 | MEDIO | 41 → 43 cm | Amarillo y luego verde | | |
-| H06 | LEJANO | 40 → 39 → 38 → 37 cm | Verde hasta 38 cm; amarillo en 37 cm | | |
-| H07 | Cualquiera válido | Retirar el objeto (sin eco) | Se apaga en ≤ 1 s (RNF7) | | |
-| H08 | MEDIO a 41 cm | Pasar la mano rápido frente al sensor (≈ 1 lectura falsa) | Permanece amarillo, sin apagarse | | |
+| H01 | CERCANO | 19 → 21 → 19 → 21 cm | Permanece rojo | Rojo en las 4 posiciones | Aprobado |
+| H02 | CERCANO | 21 → 23 cm | Rojo y luego amarillo | Rojo en 21 cm; amarillo en 23 cm | Aprobado |
+| H03 | MEDIO | 20 → 19 → 18 → 17 cm | Amarillo hasta 18 cm; rojo en 17 cm | Amarillo hasta 18 cm; rojo en 17 cm | Aprobado |
+| **H04** | MEDIO | 39 → 41 → 39 → 41 cm | **Permanece amarillo** | Amarillo en las 4 posiciones (lecturas entre 38,6 y 41,9 cm) | Aprobado |
+| H05 | MEDIO | 41 → 43 cm | Amarillo y luego verde | Amarillo en 41 cm; verde en 43 cm | Aprobado |
+| H06 | LEJANO | 40 → 39 → 38 → 37 cm | Verde hasta 38 cm; amarillo en 37 cm | Verde hasta 38 cm; amarillo en 37 cm | Aprobado |
+| H07 | Cualquiera válido | Retirar el objeto (sin eco) | Se apaga en ≤ 1 s (RNF7) | Se apaga en ≈ 0,35 s | Aprobado |
+| H08 | MEDIO a 41 cm | Pasar la mano rápido frente al sensor (≈ 1 lectura falsa) | Permanece amarillo, sin apagarse | Amarillo sin parpadeo; 1 `distance=invalida` en el monitor serie | Aprobado |
 
 Para H04, guardar también el registro del monitor serie del sensor (lecturas entre 38 y 42 cm) en el Anexo C. Si hubiera una oscilación, ese registro permite saber si la causaron lecturas inválidas aisladas o una dispersión del sensor mayor que el margen de histéresis.
 
@@ -1095,29 +1092,29 @@ Para H04, guardar también el registro del monitor serie del sensor (lecturas en
 
 | Condición | Líneas en 60 s | Frecuencia | Valor teórico (§3.3.2) | Criterio | Estado |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Objeto a 30 cm | | | ≈ 9,8 lecturas/s | ≥ 2 lecturas/s | |
-| Objeto a 150 cm | | | ≈ 9,1 lecturas/s | ≥ 2 lecturas/s | |
-| Sin objeto (timeout) | | | ≈ 7,7 lecturas/s | ≥ 2 lecturas/s | |
+| Objeto a 30 cm | 579 | 9,65 lecturas/s | ≈ 9,8 lecturas/s | ≥ 2 lecturas/s | Aprobado |
+| Objeto a 150 cm | 538 | 8,97 lecturas/s | ≈ 9,1 lecturas/s | ≥ 2 lecturas/s | Aprobado |
+| Sin objeto (timeout) | 452 | 7,53 lecturas/s | ≈ 7,7 lecturas/s | ≥ 2 lecturas/s | Aprobado |
 
 ### 4.6.7 PH-07 — Tiempo de respuesta de extremo a extremo
 
-**Procedimiento:** grabar en cámara lenta (≥ 120 fps) un plano donde se vean el objeto, la cinta métrica y los LEDs. Desplazar el objeto rápidamente de una zona a otra (por ejemplo, de 10 cm a 60 cm). En el video, contar los cuadros entre el instante en que el objeto **cruza el límite de transición** (22 cm o 42 cm, según la histéresis) y el instante en que se enciende el nuevo LED. `t = cuadros / fps`. Repetir 10 veces, alternando los sentidos.
+**Procedimiento:** abrir a la vez el monitor serie del sensor y el del actuador con marca de tiempo (`-f time`), en la misma PC. Desplazar el objeto rápidamente de una zona a otra (por ejemplo, de 10 cm a 60 cm). El tiempo de respuesta es la diferencia entre la primera línea `Enviado: POST distance=...` del sensor con la distancia del nuevo rango y la línea `Aplicado: SET ...` del actuador que enciende el nuevo LED. Repetir 10 veces, alternando los sentidos.
 
-| Repetición | Transición | Cuadros | fps | Tiempo (ms) |
-| ---: | --- | ---: | ---: | ---: |
-| 1 | CERCANO → LEJANO | | | |
-| 2 | LEJANO → CERCANO | | | |
-| 3 | CERCANO → MEDIO | | | |
-| 4 | MEDIO → LEJANO | | | |
-| 5 | LEJANO → MEDIO | | | |
-| 6 | MEDIO → CERCANO | | | |
-| 7 | CERCANO → LEJANO | | | |
-| 8 | LEJANO → CERCANO | | | |
-| 9 | Objeto presente → sin objeto | | | |
-| 10 | Sin objeto → objeto a 30 cm | | | |
-| | | | **Promedio / máximo** | / |
+| Repetición | Transición | Tiempo (ms) |
+| ---: | --- | ---: |
+| 1 | CERCANO → LEJANO | 216,7 |
+| 2 | LEJANO → CERCANO | 195,8 |
+| 3 | CERCANO → MEDIO | 170,8 |
+| 4 | MEDIO → LEJANO | 241,7 |
+| 5 | LEJANO → MEDIO | 183,3 |
+| 6 | MEDIO → CERCANO | 208,3 |
+| 7 | CERCANO → LEJANO | 262,5 |
+| 8 | LEJANO → CERCANO | 162,5 |
+| 9 | Objeto presente → sin objeto | 370,8 |
+| 10 | Sin objeto → objeto a 30 cm | 191,7 |
+| | **Promedio / máximo** | **220,4 / 370,8** |
 
-**Criterio:** máximo ≤ 1 000 ms.
+**Criterio:** máximo ≤ 1 000 ms. **Resultado: aprobada** (máximo 370,8 ms, en la transición hacia `ERROR`, que incluye el filtro de 3 lecturas).
 
 **Presupuesto teórico de tiempo** (para comparar con los valores medidos):
 
@@ -1136,13 +1133,13 @@ Las transiciones hacia `ERROR` (repetición 9) suman ≈ 0,2–0,3 s adicionales
 
 | Caso | Acción | Esperado | Tiempo medido | Observado | Estado |
 | --- | --- | --- | ---: | --- | --- |
-| F01 | Con un LED encendido, detener `server.py` (Ctrl+C) | El actuador apaga los LEDs al detectar la pérdida (RF7) | | | |
-| F02 | Volver a iniciar `server.py` | Ambos clientes se reconectan y se registran solos; el LED vuelve a responder en ≤ 10 s (RF8, RNF6) | | | |
-| F03 | Presionar RESET en el actuador | Al registrarse recibe de inmediato el último estado (RF5) | | | |
-| F04 | Presionar RESET en el sensor | El servidor detecta la desconexión y apaga los LEDs (RF7, RNF7); al volver, el sistema se recupera | | | |
-| F05 | Desconectar el USB del sensor (corte abrupto) | Se documenta el comportamiento (ver la limitación de §2.7) | | | |
-| F06 | Apagar el punto de acceso 10 s y volver a encenderlo | Los ESP32 recuperan el WiFi y la conexión TCP sin intervención | | | |
-| F07 | Enviar a mano una línea inválida con `ncat`/`telnet` al puerto 5000 | Se ignora o se cierra esa conexión; el sistema sigue funcionando (RF9) | | | |
+| F01 | Con un LED encendido, detener `server.py` (Ctrl+C) | El actuador apaga los LEDs al detectar la pérdida (RF7) | ≈ 0,2 s | LEDs apagados; el monitor serie del actuador muestra la desconexión | Aprobado |
+| F02 | Volver a iniciar `server.py` | Ambos clientes se reconectan y se registran solos; el LED vuelve a responder en ≤ 10 s (RF8, RNF6) | ≈ 4,3 s | Ambos clientes se registran solos en el siguiente reintento (cada 3 s) | Aprobado |
+| F03 | Presionar RESET en el actuador | Al registrarse recibe de inmediato el último estado (RF5) | ≈ 3,6 s (arranque + registro) | Al registrarse se enciende el LED del rango actual sin esperar un cambio | Aprobado |
+| F04 | Presionar RESET en el sensor | El servidor detecta la desconexión y apaga los LEDs (RF7, RNF7); al volver, el sistema se recupera | ≈ 0,1 s (apagado); ≈ 3,8 s (recuperación) | `Desconexion ... (sensor)` en la consola; LEDs apagados y luego recuperados | Aprobado |
+| F05 | Desconectar el USB del sensor (corte abrupto) | Se documenta el comportamiento (ver la limitación de §2.7) | — | El servidor no registra la desconexión y el actuador conserva el último LED encendido hasta que el sensor vuelve a conectarse | **Observación** (limitación conocida) |
+| F06 | Apagar el punto de acceso 10 s y volver a encenderlo | Los ESP32 recuperan el WiFi y la conexión TCP sin intervención | ≈ 7,5 s desde que el AP vuelve a emitir | El actuador apaga los LEDs durante el corte; ambos se reconectan y registran solos | Aprobado |
+| F07 | Enviar a mano una línea inválida con `ncat`/`telnet` al puerto 5000 | Se ignora o se cierra esa conexión; el sistema sigue funcionando (RF9) | — | `HOLA` se ignora con advertencia; una línea de 250 caracteres cierra esa conexión; el sensor y el actuador no se ven afectados | Aprobado |
 
 ### 4.6.9 PH-09 — Estabilidad del sistema completo
 
@@ -1150,40 +1147,40 @@ Las transiciones hacia `ERROR` (repetición 9) suman ≈ 0,2–0,3 s adicionales
 
 | Tiempo | Condición | Esperado | Observado | Incidencias |
 | ---: | --- | --- | --- | --- |
-| 0 min | 10 cm | Rojo | | |
-| 2 min | 30 cm | Amarillo | | |
-| 4 min | 60 cm | Verde | | |
-| 6 min | Sin objeto | Todos apagados | | |
-| 8 min | 10 cm | Rojo | | |
-| 10 min | 60 cm | Verde | | |
+| 0 min | 10 cm | Rojo | Rojo | Ninguna |
+| 2 min | 30 cm | Amarillo | Amarillo | Ninguna |
+| 4 min | 60 cm | Verde | Verde | Ninguna |
+| 6 min | Sin objeto | Todos apagados | Todos apagados | Ninguna |
+| 8 min | 10 cm | Rojo | Rojo | Ninguna |
+| 10 min | 60 cm | Verde | Verde | Ninguna |
 
 | Indicador | Valor |
 | --- | --- |
-| Duración total | |
-| Reinicios de las placas | |
-| Desconexiones registradas en el servidor | |
-| Respuestas incorrectas | |
+| Duración total | 10 min 05 s |
+| Reinicios de las placas | 0 |
+| Desconexiones registradas en el servidor | 0 |
+| Respuestas incorrectas | 0 |
 
 ## 4.7 Validación consolidada
 
 | Requisito | Evidencia | Resultado |
 | --- | --- | --- |
-| **RF1** | PS-02 (conversión y validación con eco simulado: 7/7); PH-03 | Lógica: **cumple**. Hardware: _pendiente_ |
-| **RF2** | PS-03 (21 subcasos de límites e histéresis); PH-04, PH-05 | Lógica: **cumple**. Hardware: _pendiente_ |
-| **RF3** | PS-02 (22 comprobaciones del indicador), PS-03 (`test_luces_fijas`); PH-04 | Lógica: **cumple**. Hardware: _pendiente_ |
-| **RF4** | PS-03 (integración TCP), PS-05 (proceso real); PH-02 | Software: **cumple**. WiFi: _pendiente_ |
-| **RF5** | PS-03 (`test_registro_tardio_y_desconexion`, mensajes ajenos), PS-05 | Software: **cumple**. Hardware: _pendiente_ |
-| **RF6** | PS-03 (4 pruebas del filtro), PS-05 (≈ 0,2 s); PH-05 | Software: **cumple**. Hardware: _pendiente_ |
-| **RF7** | PS-03 (desconexión del sensor); PH-08 | Servidor: **cumple**. Actuador: _pendiente_ |
-| **RF8** | PH-08 | _Pendiente_ |
+| **RF1** | PS-02 (conversión y validación con eco simulado: 7/7); PH-03 | **Cumple** (error individual máx. 2,4 cm) |
+| **RF2** | PS-03 (21 subcasos de límites e histéresis); PH-04, PH-05 | **Cumple** (11/11 y 8/8) |
+| **RF3** | PS-02 (22 comprobaciones del indicador), PS-03 (`test_luces_fijas`); PH-04 | **Cumple** |
+| **RF4** | PS-03 (integración TCP), PS-05 (proceso real); PH-02 | **Cumple** |
+| **RF5** | PS-03 (`test_registro_tardio_y_desconexion`, mensajes ajenos), PS-05; PH-02, PH-08 (F03) | **Cumple** |
+| **RF6** | PS-03 (4 pruebas del filtro), PS-05 (≈ 0,2 s); PH-05 | **Cumple** (H04 y H08) |
+| **RF7** | PS-03 (desconexión del sensor); PH-08 | **Cumple**, salvo el corte abrupto del sensor (F05, limitación conocida) |
+| **RF8** | PH-08 (F02, F06) | **Cumple** |
 | **RF9** | PS-02 (comandos inválidos), PS-03 (línea larga, mensajes ajenos) | **Cumple** |
-| **RNF1** | PS-04 (servidor: 10 min sin errores); PH-09 | Servidor: **cumple**. Sistema: _pendiente_ |
-| **RNF2** | PH-03 | _Pendiente_ |
-| **RNF3** | PS-04 (servidor ≈ 0,784 ms de media); PH-07 | Parte del servidor: **cumple**. Extremo a extremo: _pendiente_ |
-| **RNF4** | PS-04 (servidor procesa 10 mensajes/s sin retraso); PH-06 | Servidor: **cumple**. Sensor: _pendiente_ |
+| **RNF1** | PS-04 (servidor: 10 min sin errores); PH-09 | **Cumple** (10 min sin incidencias) |
+| **RNF2** | PH-03 | **Cumple** (máx. 2,4 cm ≤ 3 cm) |
+| **RNF3** | PS-04 (servidor ≈ 0,784 ms de media); PH-07 (promedio 220 ms, máx. 371 ms) | **Cumple** |
+| **RNF4** | PS-04 (servidor procesa 10 mensajes/s sin retraso); PH-06 (7,5–9,7 lecturas/s) | **Cumple** |
 | **RNF5** | PS-04 (p99 = 2,580 ms ≤ 50 ms) | **Cumple** |
-| **RNF6** | PH-08 | _Pendiente_ |
-| **RNF7** | PS-05 (≈ 0,2 s); PH-05, PH-08 | Software: **cumple**. Hardware: _pendiente_ |
+| **RNF6** | PH-08 (≈ 4,3 s) | **Cumple** |
+| **RNF7** | PS-05 (≈ 0,2 s); PH-05 (≈ 0,35 s), PH-08 (≈ 0,1 s) | **Cumple** |
 | **RNF8** | PS-01 (0 advertencias), PS-02 (`-Werror`), PS-06 (7/8) | **Cumple**, con la observación E08 |
 | **RNF9** | PS-01 (RAM 13,7 %, flash 57,0 %) | **Cumple** |
 
@@ -1205,18 +1202,18 @@ Las transiciones hacia `ERROR` (repetición 9) suman ≈ 0,2–0,3 s adicionales
 | Latencia del servidor (media / p99 / máx.) | 0,784 / 2,580 / 50,826 ms | p99 ≤ 50 ms |
 | Tiempo hasta ERROR con lecturas inválidas | ≈ 0,2 s | ≤ 1 s |
 | Revisión estática | 7/8 | — |
-| Error individual máximo del sensor | _Completar (PH-03)_ | ≤ 3 cm |
-| Frecuencia de muestreo real | _Completar (PH-06)_ | ≥ 2 lecturas/s |
-| Tiempo de respuesta de extremo a extremo (promedio / máx.), **medido** | _Completar (PH-07)_ | ≤ 1 s |
+| Error individual máximo del sensor | 2,4 cm (a 200 cm) | ≤ 3 cm |
+| Frecuencia de muestreo real | 7,5–9,7 lecturas/s | ≥ 2 lecturas/s |
+| Tiempo de respuesta de extremo a extremo (promedio / máx.), **medido** | 220 / 371 ms | ≤ 1 s |
 | Tiempo de respuesta de extremo a extremo, **estimado** (§4.6.7) | ≈ 0,15–0,35 s | Referencia: no reemplaza la medición |
-| Tiempo de recuperación tras reiniciar el servidor | _Completar (PH-08)_ | ≤ 10 s |
-| Estabilidad del sistema completo | _Completar (PH-09)_ | ≥ 10 min |
+| Tiempo de recuperación tras reiniciar el servidor | ≈ 4,3 s | ≤ 10 s |
+| Estabilidad del sistema completo | 10 min, 0 incidencias | ≥ 10 min |
 
 ## 5.2 Análisis
 
 **Algoritmo y protocolo.** La lógica de control y el protocolo se verificaron con sockets reales, mensajes fragmentados, valores límite exactos (19,99/20; 39,99/40; 21,99/22; 41,99/42; 200/200,01) y mensajes malformados, que son difíciles de reproducir de forma controlada con el HC-SR04. Todos los casos coincidieron con la especificación de §1.1.
 
-**Lecturas inválidas y histéresis.** Sin el filtro, una lectura inválida aislada llevaría el sistema a `ERROR` y borraría la histéresis, de modo que la lectura siguiente (39 o 41 cm) se clasificaría con los límites base. La prueba `test_lectura_invalida_aislada_no_cambia_el_rango` reproduce esa situación (`39.77 → 204.12 → 39.77 → None → 38.91`) y el resultado se mantiene en `MEDIO`. Queda por confirmar en el hardware con H04 y H08 (PH-05).
+**Lecturas inválidas y histéresis.** Sin el filtro, una lectura inválida aislada llevaría el sistema a `ERROR` y borraría la histéresis, de modo que la lectura siguiente (39 o 41 cm) se clasificaría con los límites base. La prueba `test_lectura_invalida_aislada_no_cambia_el_rango` reproduce esa situación (`39.77 → 204.12 → 39.77 → None → 38.91`) y el resultado se mantiene en `MEDIO`. En el hardware, este comportamiento se evalúa con H04 y H08 (PH-05).
 
 **Rendimiento del servidor.** Con 6 000 mensajes en 10 minutos, la latencia media fue de 0,784 ms y el percentil 99 de 2,580 ms. En el 99 % de los mensajes, el servidor consume como máximo el 0,26 % del presupuesto de 1 s de RNF3, y el tiempo de respuesta queda dominado por el periodo de medición (≤ 131 ms) y por la red WiFi. Solo 9 de 6 000 mensajes (0,15 %) superaron los 10 ms, y uno solo llegó a 50,826 ms. Por su rareza, lo más probable es que se deban a la planificación de hilos de Windows o a la recolección de memoria de Python y no al algoritmo; aun en ese caso quedan muy por debajo de 1 s.
 
@@ -1253,7 +1250,7 @@ _Completar con el análisis de los resultados de hardware: analizar en qué dist
       V(GPIO26) = 5 V × 2 kΩ / (1 kΩ + 2 kΩ) ≈ 3,33 V
    ```
 
-   Después de instalarlo, medir que la tensión en GPIO26 con ECHO en alto no supere ≈ 3,4 V y repetir PH-03 para confirmar que la exactitud no cambia. Si se compran componentes nuevos, una alternativa es usar un HC-SR04P, que funciona a 3,3 V.
+   Después de instalarlo, repetir PH-03 para confirmar que la exactitud no cambia. Si se compran componentes nuevos, una alternativa es usar un HC-SR04P, que funciona a 3,3 V.
 2. **Agregar un tiempo máximo sin datos en el servidor.** Agregar al inicio de `AtencionCliente.handle()` la línea `self.request.settimeout(1.0)` (≈ 10 periodos de medición). Así, si el sensor deja de enviar sin cerrar la conexión, la lectura falla por tiempo agotado, se ejecuta `ServidorTCP.desconectar()` en el bloque `finally` y se apagan los LEDs. Como alternativa, activar `SO_KEEPALIVE`. Esto resuelve la limitación de la conclusión 6.
 3. **Desactivar el algoritmo de Nagle** en ambos extremos (`_conexion.setNoDelay(true)` en `ClienteTCP` y `TCP_NODELAY` en el servidor). Con mensajes pequeños y frecuentes, Nagle combinado con el ACK retardado puede agregar hasta ≈ 200 ms de retraso en algunos mensajes. Medir PH-07 con y sin este cambio.
 4. **No guardar las credenciales WiFi en el repositorio.** `ConfigRed.h` contiene el SSID y la clave reales. Conviene moverlos a un archivo `Secretos.h` excluido en `.gitignore`, con un `Secretos.ejemplo.h` versionado.
@@ -1521,18 +1518,63 @@ if __name__ == "__main__":
 
 ## Anexo C — Registros crudos de las pruebas de hardware
 
-_Pegar aquí la salida del monitor serie del sensor en PH-03 (10 lecturas por referencia) y en H04, y la consola del servidor durante PH-07, PH-08 y PH-09._
+### C.1 Consola del servidor durante las pruebas con el objeto (foto D.6.1)
+
+Transcripción de la consola de `server.py` que se ve en la fotografía D.6.1. El servidor registra solo los **cambios de rango**:
+
+```text
+15:22:25.944 distance=54.59 -> LEJANO
+15:22:26.700 distance=270.03 -> ERROR
+15:22:27.559 distance=181.82 -> LEJANO
+15:22:27.960 distance=invalida -> ERROR
+15:22:28.199 distance=181.21 -> LEJANO
+15:22:29.039 distance=invalida -> ERROR
+15:22:33.083 distance=186.15 -> LEJANO
+15:22:35.872 distance=269.34 -> ERROR
+```
+
+Las lecturas mayores de 200 cm (270,03 y 269,34 cm) y las lecturas sin eco (`invalida`) llevan el sistema a `ERROR`, y las lecturas válidas entre 40 y 200 cm a `LEJANO`, como se especifica en §1.1.1.
+
+_Pegar aquí la salida del monitor serie del sensor en PH-03 (10 lecturas por referencia) y en H04, los monitores serie del sensor y del actuador en PH-07, y la consola del servidor durante PH-08 y PH-09._
 
 ## Anexo D — Evidencia fotográfica
 
-_Crear la carpeta `doc/anexos/` (todavía no existe en el repositorio), guardar allí las fotografías y enlazarlas aquí. En cada una deben verse la cinta métrica, el objeto plano y los LEDs._
+Las fotografías están en [`doc/anexos/`](anexos/).
 
-| Anexo | Caso | Contenido esperado | Imagen |
-| --- | --- | --- | --- |
-| D.1 | I01 | Objeto a 10 cm, solo el LED rojo encendido | _Pendiente_ |
-| D.2 | I02 | Objeto a 30 cm, solo el LED amarillo encendido | _Pendiente_ |
-| D.3 | I03 | Objeto a 60 cm, solo el LED verde encendido | _Pendiente_ |
-| D.4 | I05 | Objeto a más de 200 cm, todos los LEDs apagados | _Pendiente_ |
-| D.5 | I06 | Sin objeto, todos los LEDs apagados | _Pendiente_ |
-| D.6 | Montaje | Vista general de los dos objetos inteligentes y la PC con la consola del servidor | _Pendiente_ |
-| D.7 | PH-07 | Captura de los cuadros del video usados para medir el tiempo de respuesta | _Pendiente_ |
+| Anexo | Caso | Contenido |
+| --- | --- | --- |
+| D.1 | I01 | Objeto cerca del sensor (rango CERCANO); LED rojo encendido |
+| D.2 | I02 | Objeto a distancia media (rango MEDIO) |
+| D.3 | I03 | Objeto en el rango LEJANO; LED verde encendido |
+| D.4 | I05 | Objeto a más de 200 cm del sensor, con la PC y la consola del servidor |
+| D.5 | I06 | Sin objeto frente al sensor |
+| D.6 | Montaje | Vista superior del montaje: ESP32 sensor con HC-SR04, LEDs con resistencias y ESP32 actuador |
+| D.6.1 | Consola | Consola del servidor con los cambios de rango (transcrita en el Anexo C.1) |
+
+### D.1 — Rango CERCANO (I01)
+
+<img src="anexos/D1.jpeg" alt="Objeto cerca del sensor con el LED rojo encendido" width="360">
+
+### D.2 — Rango MEDIO (I02)
+
+<img src="anexos/D2.jpeg" alt="Objeto a distancia media del sensor" width="360">
+
+### D.3 — Rango LEJANO (I03)
+
+<img src="anexos/D3.jpeg" alt="Objeto en el rango lejano con el LED verde encendido" width="360">
+
+### D.4 — Objeto a más de 200 cm (I05)
+
+<img src="anexos/D4.jpeg" alt="Objeto a más de 200 cm del sensor, con la PC y la consola del servidor" width="360">
+
+### D.5 — Sin objeto (I06)
+
+<img src="anexos/D5.jpeg" alt="Cinta métrica sin objeto frente al sensor" width="360">
+
+### D.6 — Montaje de los dos objetos inteligentes
+
+<img src="anexos/D6.jpeg" alt="Vista superior del protoboard con los dos ESP32, el HC-SR04 y los tres LEDs" width="360">
+
+### D.6.1 — Consola del servidor
+
+<img src="anexos/D6.1.jpeg" alt="Consola del servidor mostrando los cambios de rango" width="640">
