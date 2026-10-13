@@ -9,8 +9,6 @@
 | **Fecha** | 13 Octubre de 2026 |
 | **Integrantes** | Alejandro Machaca Villena - Rubén Cordero Martinez - Luciana Leaño Guerrero |
 
-El trabajo se organizó en ramas por módulo (`Sensor`, `leds` y `server`), que luego se integraron en `main`. El historial de commits de cada rama respalda el aporte individual.
-
 ---
 
 ## Contenido
@@ -938,7 +936,7 @@ Las pruebas de integración levantan el `ServidorTCP` real en `127.0.0.1` con un
 
 **Objetivo:** cuantificar cuánto tiempo **agrega el servidor** al tiempo de respuesta (RNF5) y comprobar que procesa sin errores el flujo del sensor durante 10 minutos continuos.
 
-**Procedimiento:** un script de medición (Anexo B) levanta `ServidorTCP` en `127.0.0.1` y conecta un actuador y un sensor simulados por TCP. El sensor envía **10 `POST` por segundo** (la frecuencia del ESP32) con distancias aleatorias de 1 a 220 cm, generadas con una semilla fija; el 5 % son `invalida`. Para cada `POST` se mide el tiempo hasta que el actuador recibe el `SET`. Además, se compara el comando con el que calcula un modelo de referencia (`ControlDistancia`).
+**Procedimiento:** un script de medición escrito para esta prueba levanta `ServidorTCP` en `127.0.0.1` y conecta un actuador y un sensor simulados por TCP. El sensor envía **10 `POST` por segundo** (la frecuencia del ESP32) con distancias aleatorias de 1 a 220 cm, generadas con una semilla fija; el 5 % son `invalida`. Para cada `POST` se mide el tiempo hasta que el actuador recibe el `SET`. Además, se compara el comando con el que calcula un modelo de referencia (`ControlDistancia`). El script no forma parte del repositorio; su código completo está en el Anexo B.
 
 **Criterios de aceptación:** 0 comandos incorrectos, 0 desconexiones, 10 minutos completos y latencia p99 ≤ 50 ms.
 
@@ -1256,7 +1254,7 @@ _Completar con el análisis de los resultados de hardware: analizar en qué dist
    ```
 
    Después de instalarlo, medir que la tensión en GPIO26 con ECHO en alto no supere ≈ 3,4 V y repetir PH-03 para confirmar que la exactitud no cambia. Si se compran componentes nuevos, una alternativa es usar un HC-SR04P, que funciona a 3,3 V.
-2. **Agregar un tiempo máximo sin datos en el servidor.** Configurar en `AtencionCliente.setup()` un `timeout` del socket de ≈ 1 s (≈ 10 periodos de medición) para que, si el sensor deja de enviar sin cerrar la conexión, se ejecute `desconectar()` y se apaguen los LEDs. Como alternativa, activar `SO_KEEPALIVE`. Esto resuelve la limitación de la conclusión 6.
+2. **Agregar un tiempo máximo sin datos en el servidor.** Agregar al inicio de `AtencionCliente.handle()` la línea `self.request.settimeout(1.0)` (≈ 10 periodos de medición). Así, si el sensor deja de enviar sin cerrar la conexión, la lectura falla por tiempo agotado, se ejecuta `ServidorTCP.desconectar()` en el bloque `finally` y se apagan los LEDs. Como alternativa, activar `SO_KEEPALIVE`. Esto resuelve la limitación de la conclusión 6.
 3. **Desactivar el algoritmo de Nagle** en ambos extremos (`_conexion.setNoDelay(true)` en `ClienteTCP` y `TCP_NODELAY` en el servidor). Con mensajes pequeños y frecuentes, Nagle combinado con el ACK retardado puede agregar hasta ≈ 200 ms de retraso en algunos mensajes. Medir PH-07 con y sin este cambio.
 4. **No guardar las credenciales WiFi en el repositorio.** `ConfigRed.h` contiene el SSID y la clave reales. Conviene moverlos a un archivo `Secretos.h` excluido en `.gitignore`, con un `Secretos.ejemplo.h` versionado.
 5. **Evaluar un filtro de mediana de 3 o 5 lecturas en el servidor** si PH-05 muestra oscilaciones residuales cerca de 20 o 40 cm. No agrega retraso perceptible a 10 lecturas/s.
@@ -1393,7 +1391,7 @@ Distribución de las latencias:
 
 ## Anexo B — Script de medición de PS-04
 
-El script reutiliza las clases reales de `server.py` y no modifica el código del proyecto. Para repetir la prueba, guardarlo como `medir_servidor.py` en la carpeta `pruebas/` y ejecutar `python pruebas/medir_servidor.py --duracion 600`.
+Este script **no está incluido en el repositorio**: se usó solo para la prueba PS-04 y su código completo se reproduce aquí. Reutiliza las clases reales de `server.py` y no modifica el código del proyecto. Para repetir la prueba, copiarlo a un archivo nuevo, por ejemplo `pruebas/medir_servidor.py`, y ejecutar `python pruebas/medir_servidor.py --duracion 600`.
 
 <details>
 <summary>Ver el código del script</summary>
@@ -1527,7 +1525,7 @@ _Pegar aquí la salida del monitor serie del sensor en PH-03 (10 lecturas por re
 
 ## Anexo D — Evidencia fotográfica
 
-_Agregar las fotografías en `doc/anexos/` y enlazarlas aquí. En cada una deben verse la cinta métrica, el objeto plano y los LEDs._
+_Crear la carpeta `doc/anexos/` (todavía no existe en el repositorio), guardar allí las fotografías y enlazarlas aquí. En cada una deben verse la cinta métrica, el objeto plano y los LEDs._
 
 | Anexo | Caso | Contenido esperado | Imagen |
 | --- | --- | --- | --- |
