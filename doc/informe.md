@@ -6,8 +6,8 @@
 | **Carrera** | Ingeniería de Sistemas |
 | **Actividad** | Integración de objetos inteligentes con TCP/IP |
 | **Repositorio** | https://github.com/Alous12/Proyecto_2_IOT |
-| **Fecha** | Octubre de 2026 |
-
+| **Fecha** | 13 Octubre de 2026 |
+| **Integrantes** | Alejandro Machaca Villena - Rubén Cordero Martinez - Luciana Leaño Guerrero |
 
 El trabajo se organizó en ramas por módulo (`Sensor`, `leds` y `server`), que luego se integraron en `main`. El historial de commits de cada rama respalda el aporte individual.
 
@@ -197,8 +197,8 @@ Los diagramas representan el **montaje real utilizado en el prototipo**. Ambos E
 | --- | --- | ---: | ---: | --- |
 | Alimentación del HC-SR04 | Pin 5V/VIN (USB) → VCC | 5 V | 4,5–5,5 V (HC-SR04) | Correcta |
 | TRIG | GPIO25 → HC-SR04 | 3,3 V | Entrada alta del HC-SR04 ≈ 2,0 V o más | Correcta: 3,3 V se reconoce como alto |
-| **ECHO** | **HC-SR04 → GPIO26** | **≈ 5 V** | **Máximo absoluto del ESP32: VDD + 0,3 V ≈ 3,6 V** | **Fuera de especificación (riesgo R1, §2.3.2)** |
-| LEDs | GPIO13/27/14 → resistencia → LED | 3,3 V | 40 mA máximo por GPIO | Correcta (≈ 5–6 mA) |
+| **ECHO** | **HC-SR04 → GPIO26** | **≈ 5 V** | **Máximo absoluto del ESP32: VDD + 0,3 V ≈ 3,6 V** | **Fuera de especificación (ver Recomendación 1, §7)** |
+| LEDs | GPIO13/27/14 → LED → resistencia → GND | 3,3 V | 40 mA máximo por GPIO | Correcta (≈ 5–6 mA) |
 
 ### 2.3.1 Objeto inteligente 1 — Sensor (montaje actual)
 
@@ -221,58 +221,25 @@ Los diagramas representan el **montaje real utilizado en el prototipo**. Ambos E
 | HC-SR04 VCC | Pin 5V/VIN del ESP32 | El módulo requiere 5 V para funcionar. |
 | HC-SR04 GND | GND común | Referencia común de tensión. |
 | HC-SR04 TRIG | GPIO25 | 3,3 V supera el umbral de entrada alta del HC-SR04; no requiere adaptación. |
-| HC-SR04 ECHO | **Directo** a GPIO26 | Montaje utilizado en el prototipo. **No cumple el límite de tensión del ESP32**: ver el análisis siguiente. |
+| HC-SR04 ECHO | **Directo** a GPIO26 | Montaje utilizado en el prototipo. **No cumple el límite de tensión del ESP32**: ver Recomendación 1 (§7). |
 
-### 2.3.2 Análisis del nivel de ECHO (riesgo R1)
-
-**Problema.** El HC-SR04 alimentado a 5 V entrega en ECHO un pulso de ≈ 5 V, cuya duración es proporcional a la distancia. Los GPIO del ESP32 son de 3,3 V y **no toleran 5 V**: la hoja de datos de Espressif fija el máximo absoluto de entrada en VDD + 0,3 V ≈ 3,6 V. El montaje actual supera ese límite en ≈ 1,4 V.
-
-**Qué ocurre eléctricamente.** Cuando ECHO está en alto, el diodo interno de protección del GPIO26 hacia el riel de 3,3 V entra en conducción. Fija la tensión del pin en ≈ 3,3 V + 0,6 V ≈ 3,9 V y deriva corriente desde la salida del HC-SR04 hacia el riel de 3,3 V. Esa corriente solo la limita la impedancia de salida del módulo, porque no hay ninguna resistencia en serie. Por lo tanto:
-
-| Consecuencia posible | Explicación |
-| --- | --- |
-| Degradación del GPIO26 o del diodo de protección | Los diodos de protección están diseñados para descargas breves (ESD), no para conducir en cada medición. |
-| Elevación del riel de 3,3 V | La corriente inyectada sube el riel, lo que puede afectar al resto del chip, incluida la radio WiFi. |
-| Falla definitiva del pin | Es el peor caso. Con el pin dañado, `pulseIn()` devuelve 0 y todas las lecturas pasan a `invalida`. |
-
-**Por qué el prototipo funciona igual.** El diodo de protección mantiene la tensión del pin cerca de un nivel que el ESP32 interpreta como alto, y el pulso dura poco. Con objeto, ECHO está en alto ≤ 11,7 ms por cada ciclo de ≈ 110 ms (≤ 11 % del tiempo). Sin objeto, puede llegar a ≈ 30 % por el timeout. Esto explica que el prototipo funcione. Pero que **funcione no significa que sea seguro**: el pin opera fuera de especificación y su vida útil no está garantizada.
-
-**Decisión del grupo.** Para esta entrega se mantuvo el montaje con ECHO directo, que es el que se usó en todas las pruebas. El riesgo se **documenta y se acepta de forma temporal**, y su corrección es la primera recomendación (§7). La verificación del montaje (PH-01) incluye, como dato complementario, la tensión real en el pin.
-
-**Corrección propuesta (sin cambios en el software).** Cualquiera de estas opciones lleva la señal a niveles seguros:
-
-| Opción | Implementación | Tensión en GPIO26 | Comentario |
-| --- | --- | ---: | --- |
-| **A. Divisor resistivo** (recomendada) | R1 = 1 kΩ en serie desde ECHO; R2 = 2 kΩ de GPIO26 a GND | 5 V × 2/3 ≈ **3,33 V** | Dos resistencias. La constante RC (≈ 2 kΩ × 10 pF ≈ 20 ns) no afecta la medición de pulsos de microsegundos. |
-| B. Conversor de nivel | Módulo bidireccional con MOSFET BSS138 (lado HV a 5 V, lado LV a 3,3 V) | 3,3 V | Más robusto, pero agrega un módulo. |
-| C. Sensor de 3,3 V | Reemplazar por un HC-SR04P / RCWL-1601 alimentado a 3,3 V | 3,3 V | Elimina el problema de raíz. |
-| D. Mínima | Una resistencia de 4,7 kΩ en serie | ≈ 3,9 V (fijada por el diodo) | Limita la corriente del diodo a ≈ (5 − 3,9) V / 4,7 kΩ ≈ 0,23 mA. Mejora el montaje actual, pero el pin sigue fuera de especificación. |
-
-Esquema de la opción A:
-
-```text
-   HC-SR04 ECHO (5 V) ──[ R1 1 kΩ ]──┬──► GPIO26  (≈ 3,33 V)
-                                     │
-                                [ R2 2 kΩ ]
-                                     │
-                                    GND
-   V(GPIO26) = 5 V × R2 / (R1 + R2) = 5 V × 2 kΩ / 3 kΩ ≈ 3,33 V
-```
-
-### 2.3.3 Objeto inteligente 2 — Actuador
+### 2.3.2 Objeto inteligente 2 — Actuador
 
 ```text
                  ESP32 DevKit
-            ┌──────────────────┐
-            │ GPIO13 ──────────┼──[ 220 Ω ]──►|── LED rojo ─────┐
-            │                  │            ánodo  cátodo       │
-            │ GPIO27 ──────────┼──[ 220 Ω ]──►|── LED amarillo ─┤
-            │                  │                                │
-            │ GPIO14 ──────────┼──[ 220 Ω ]──►|── LED verde ────┤
-            │                  │                                │
-            │ GND ─────────────┼────────────────────────────────┘
+            ┌──────────────────┐  cable macho-macho    LED       220 Ω   línea GND
+            │                  │                                        (protoboard)
+            │ GPIO13 ──────────┼──────────────►|── rojo ─────[ 220 Ω ]──┐
+            │                  │         ánodo   cátodo                 │
+            │ GPIO27 ──────────┼──────────────►|── amarillo ─[ 220 Ω ]──┤
+            │                  │                                        │
+            │ GPIO14 ──────────┼──────────────►|── verde ────[ 220 Ω ]──┤
+            │                  │                                        │
+            │ GND ─────────────┼────────────────────────────────────────┘
             └──────────────────┘
 ```
+
+Cada GPIO se conecta con un cable macho-macho a la pata larga (ánodo) de su LED. La resistencia de 220 Ω va desde la pata corta (cátodo) hasta la línea negativa (GND) del protoboard, que está unida al GND del ESP32. Como LED y resistencia están en serie, la posición de la resistencia (antes o después del LED) no cambia la corriente.
 
 | LED | GPIO | Caída típica (Vf) | Corriente estimada I = (3,3 V − Vf) / 220 Ω |
 | --- | --- | --- | --- |
@@ -439,29 +406,51 @@ sequenceDiagram
 
 ### 2.5.2 Diagrama de estados — algoritmo de control en el servidor
 
+El servidor tiene cuatro estados. Cada uno corresponde a un LED encendido (o a ninguno, en `ERROR`). Los tres rangos se ordenan de cerca a lejos y, por la histéresis, **para salir de un estado hay que pasar el límite por 2 cm**:
+
 ```mermaid
-stateDiagram-v2
-    [*] --> ERROR
-    ERROR --> CERCANO: válida y d < 20
-    ERROR --> MEDIO: válida y 20 ≤ d < 40
-    ERROR --> LEJANO: válida y 40 ≤ d ≤ 200
+flowchart LR
+    INICIO(("inicio")) --> ERROR
 
-    CERCANO --> MEDIO: 22 ≤ d < 40
-    CERCANO --> LEJANO: d ≥ 40
-    MEDIO --> CERCANO: d < 18
-    MEDIO --> LEJANO: d ≥ 42
-    LEJANO --> MEDIO: 20 ≤ d < 38
-    LEJANO --> CERCANO: d < 20
+    ERROR["⚫ ERROR<br/>todos apagados"]
+    CERCANO["🔴 CERCANO<br/>2 – 20 cm"]
+    MEDIO["🟡 MEDIO<br/>20 – 40 cm"]
+    LEJANO["🟢 LEJANO<br/>40 – 200 cm"]
 
-    CERCANO --> ERROR: 3 inválidas seguidas
-    MEDIO --> ERROR: 3 inválidas seguidas
-    LEJANO --> ERROR: 3 inválidas seguidas
+    CERCANO -- "se aleja: d ≥ 22" --> MEDIO
+    MEDIO -- "se acerca: d < 18" --> CERCANO
+    MEDIO -- "se aleja: d ≥ 42" --> LEJANO
+    LEJANO -- "se acerca: d < 38" --> MEDIO
 
-    note right of MEDIO
-        1 o 2 lecturas inválidas seguidas
-        no cambian el estado
-    end note
+    ERROR -. "primera lectura válida<br/>(límites 20 y 40, sin histéresis)" .-> MEDIO
+    CERCANO & MEDIO & LEJANO -. "3 inválidas seguidas" .-> ERROR
+
+    style ERROR fill:#e0e0e0,stroke:#555,color:#000
+    style CERCANO fill:#ffcdd2,stroke:#c62828,color:#000
+    style MEDIO fill:#fff59d,stroke:#f9a825,color:#000
+    style LEJANO fill:#c8e6c9,stroke:#2e7d32,color:#000
 ```
+
+Cómo leer el diagrama:
+
+- **Flechas continuas:** cambios por distancia. El objeto tiene que superar el límite (20 o 40 cm) por 2 cm para que el LED cambie.
+- **Flechas punteadas:** cambios por lecturas inválidas. Una o dos lecturas inválidas seguidas no cambian el estado; la tercera lleva a `ERROR`.
+- **Salida de `ERROR`:** la primera lectura válida se clasifica directamente con los límites 20 y 40 cm, por lo que puede ir a cualquiera de los tres rangos (la flecha a `MEDIO` es solo representativa).
+- **Saltos grandes:** si el objeto se mueve rápido, por ejemplo de 10 a 60 cm, el servidor salta directo de `CERCANO` a `LEJANO` sin pasar por `MEDIO`.
+
+La misma regla vista sobre la distancia. Cada barra muestra entre qué distancias se mantiene encendido el LED actual; al salir de la barra, el LED cambia:
+
+```text
+Distancia (cm)     2            18   20   22           38   40   42                200
+                   ├─────────────┼────┼────┼────────────┼────┼────┼──────────────────┤
+Límites base       │──── CERCANO ─────│─────── MEDIO ────────│─────── LEJANO ────────│
+
+Si está en rojo    ├───── sigue rojo ──────┤
+Si está en amarillo              ├──────── sigue amarillo ────────┤
+Si está en verde                                        ├─────── sigue verde ────────┤
+```
+
+Entre 18 y 22 cm, y entre 38 y 42 cm, el LED depende de **dónde venía** el objeto. Esa zona es la que evita el parpadeo cuando el objeto se queda quieto justo sobre un límite.
 
 ### 2.5.3 Diagrama de actividad — firmware de cada objeto
 
@@ -565,7 +554,7 @@ Sensor                         Servidor                         Actuador
 | IP fijas | El sensor y el actuador encuentran siempre al servidor; los diagnósticos son reproducibles. | Hay que ajustar `ConfigRed.h` a cada red; `USAR_IP_FIJA = false` permite DHCP. |
 | `ThreadingTCPServer` con `Lock` | Un hilo por cliente; un cliente lento no bloquea a los demás. El bloqueo protege el estado compartido. | Escala a pocos clientes, suficiente para el alcance. |
 | Sin almacenar lecturas mientras no hay conexión | Un dato de distancia viejo no sirve para el control en tiempo real. | Se pierden las lecturas del periodo desconectado. |
-| ECHO conectado directo a GPIO26 | Es el montaje con el que se hicieron todas las pruebas; no requiere componentes adicionales. | **Riesgo R1:** ≈ 5 V en un pin de 3,3 V, fuera de especificación (§2.3.2). Ver Recomendación 1. |
+| ECHO conectado directo a GPIO26 | Es el montaje con el que se hicieron todas las pruebas; no requiere componentes adicionales. | **Riesgo R1:** ≈ 5 V en un pin de 3,3 V, fuera de especificación. Ver Recomendación 1 (§7). |
 | Detección de desconexión basada en TCP | No requiere mensajes adicionales. | **Una caída abrupta del sensor (corte de energía) no cierra el socket**: el servidor no lo detecta y el actuador conserva el último LED. Ver Recomendación 2. |
 
 ---
@@ -595,19 +584,68 @@ build_src_filter = +<cliente/PrincipalActuador.cpp> +<cliente/ClienteTCP.cpp> +<
 
 ## 3.2 Estructura del código fuente
 
-| Archivo | Nodo | Responsabilidad |
-| --- | --- | --- |
-| [`src/cliente/PrincipalSensor.cpp`](../src/cliente/PrincipalSensor.cpp) | Sensor | Coordina el ciclo: actualizar conexión → medir → enviar `POST` → esperar 100 ms. |
-| [`src/cliente/SensorUltrasonico.h`](../src/cliente/SensorUltrasonico.h) / [`.cpp`](../src/cliente/SensorUltrasonico.cpp) | Sensor | Clase del HC-SR04 y estructura `LecturaDistancia`. |
-| [`src/cliente/PrincipalActuador.cpp`](../src/cliente/PrincipalActuador.cpp) | Actuador | Coordina el ciclo: actualizar conexión → leer líneas → aplicar `SET`. |
-| [`src/cliente/IndicadorLeds.h`](../src/cliente/IndicadorLeds.h) / [`.cpp`](../src/cliente/IndicadorLeds.cpp) | Actuador | Interpreta `SET` y escribe los GPIO. |
-| [`src/cliente/ClienteTCP.h`](../src/cliente/ClienteTCP.h) / [`.cpp`](../src/cliente/ClienteTCP.cpp) | Ambos | WiFi, conexión TCP, registro, reconexión y enmarcado de líneas. |
-| [`src/cliente/Config.h`](../src/cliente/Config.h) | Ambos | Pines, tiempos y límites físicos del sensor. |
-| [`src/cliente/ConfigRed.h`](../src/cliente/ConfigRed.h) | Ambos | Red WiFi, IP, puerto, reintentos y longitud máxima de los mensajes. |
-| [`src/servidor/server.py`](../src/servidor/server.py) | Servidor | Algoritmo de control, protocolo y servidor TCP multihilo. |
-| [`pruebas/test_servidor.py`](../pruebas/test_servidor.py) | Pruebas | Pruebas unitarias y de integración TCP del servidor. |
-| [`pruebas/prueba_cliente.cpp`](../pruebas/prueba_cliente.cpp) + [`pruebas/soporte/Arduino.h`](../pruebas/soporte/Arduino.h) | Pruebas | Prueba nativa del sensor y del indicador, con GPIO simulados. |
-| [`pruebas/simular_sensor.py`](../pruebas/simular_sensor.py) | Pruebas | Sensor simulado para probar el servidor y el actuador sin el HC-SR04. |
+El repositorio genera **tres programas**: dos firmwares para los ESP32 y el servidor en Python. Los dos firmwares comparten la comunicación (`ClienteTCP`) y la configuración; cada uno agrega solo la clase de su hardware.
+
+```mermaid
+flowchart TB
+    subgraph COMUN["🔗 Compartido por ambos firmwares"]
+        direction LR
+        CT["<b>ClienteTCP</b><br/>WiFi · conexión TCP · registro<br/>reconexión · lectura por líneas"]
+        CFG["<b>Config.h</b><br/>pines · tiempos<br/>límites del sensor"]
+        RED["<b>ConfigRed.h</b><br/>WiFi · IP · puerto<br/>longitud máxima"]
+    end
+
+    subgraph FW1["📡 Firmware sensor (pio run -e sensor)"]
+        PS["<b>PrincipalSensor.cpp</b><br/>conectar → medir → POST → esperar 100 ms"]
+        SU["<b>SensorUltrasonico</b><br/>controla el HC-SR04<br/>devuelve LecturaDistancia"]
+        PS --> SU
+    end
+
+    subgraph FW2["💡 Firmware actuador (pio run -e actuador)"]
+        PA["<b>PrincipalActuador.cpp</b><br/>conectar → leer línea → aplicar SET"]
+        IL["<b>IndicadorLeds</b><br/>interpreta SET<br/>escribe los 3 GPIO"]
+        PA --> IL
+    end
+
+    subgraph SRV["🖥️ Servidor (python server.py)"]
+        SP["<b>server.py</b><br/>algoritmo de control · protocolo<br/>servidor TCP multihilo"]
+    end
+
+    PS --> COMUN
+    PA --> COMUN
+    FW1 -. "POST" .-> SRV
+    SRV -. "SET" .-> FW2
+
+    style COMUN fill:#e3f2fd,stroke:#1565c0,color:#000
+    style FW1 fill:#fff3e0,stroke:#ef6c00,color:#000
+    style FW2 fill:#f3e5f5,stroke:#6a1b9a,color:#000
+    style SRV fill:#e8f5e9,stroke:#2e7d32,color:#000
+```
+
+Organización de carpetas:
+
+```text
+Proyecto_2_IOT/
+├── platformio.ini                 Define los entornos "sensor" y "actuador"
+├── src/
+│   ├── cliente/                   Código de los ESP32 (C++)
+│   │   ├── PrincipalSensor.cpp      [sensor]    setup() y loop() del sensor
+│   │   ├── SensorUltrasonico.h/.cpp [sensor]    clase del HC-SR04
+│   │   ├── PrincipalActuador.cpp    [actuador]  setup() y loop() del actuador
+│   │   ├── IndicadorLeds.h/.cpp     [actuador]  clase de los 3 LEDs
+│   │   ├── ClienteTCP.h/.cpp        [ambos]     comunicación con el servidor
+│   │   ├── Config.h                 [ambos]     pines y tiempos
+│   │   └── ConfigRed.h              [ambos]     red WiFi, IP y puerto
+│   └── servidor/
+│       └── server.py                [servidor]  control, protocolo y TCP
+└── pruebas/
+    ├── test_servidor.py             Pruebas unitarias y TCP del servidor
+    ├── prueba_cliente.cpp           Prueba nativa del sensor y de los LEDs
+    ├── soporte/Arduino.h            Arduino simulado para compilar en la PC
+    └── simular_sensor.py            Sensor falso para probar sin el HC-SR04
+```
+
+Enlaces directos: [`PrincipalSensor.cpp`](../src/cliente/PrincipalSensor.cpp) · [`SensorUltrasonico.cpp`](../src/cliente/SensorUltrasonico.cpp) · [`PrincipalActuador.cpp`](../src/cliente/PrincipalActuador.cpp) · [`IndicadorLeds.cpp`](../src/cliente/IndicadorLeds.cpp) · [`ClienteTCP.cpp`](../src/cliente/ClienteTCP.cpp) · [`Config.h`](../src/cliente/Config.h) · [`ConfigRed.h`](../src/cliente/ConfigRed.h) · [`server.py`](../src/servidor/server.py) · [`test_servidor.py`](../pruebas/test_servidor.py) · [`prueba_cliente.cpp`](../pruebas/prueba_cliente.cpp) · [`simular_sensor.py`](../pruebas/simular_sensor.py)
 
 ## 3.3 Objeto sensor
 
@@ -1003,7 +1041,7 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 
 ### 4.6.1 PH-01 — Verificación del circuito y del nivel de ECHO
 
-**Objetivo:** confirmar que el montaje coincide con los diagramas de §2.3. Las mediciones de ECHO (C02–C04) no son un criterio de aprobación: son datos complementarios que cuantifican el riesgo R1 analizado en §2.3.2.
+**Objetivo:** confirmar que el montaje coincide con los diagramas de §2.3. Las mediciones de ECHO (C02–C04) no son un criterio de aprobación: son datos complementarios que cuantifican el riesgo R1 descrito en la Recomendación 1 (§7).
 
 | Caso | Medición | Esperado | Medido | Estado |
 | --- | --- | --- | --- | --- |
@@ -1013,7 +1051,7 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 | C04 | Tensión del riel 3V3 de la placa con ECHO en alto | 3,2–3,4 V (que no suba) | | |
 | C05 | Tensión en la resistencia del LED rojo encendido → I = V / 220 Ω | ≤ 12 mA | | |
 | C06 | Continuidad de GND común en cada objeto | Continuidad | | |
-| C07 | (Si se instala el divisor de la opción A) tensión en GPIO26 con ECHO en alto | ≤ 3,4 V | | |
+| C07 | (Si se instala el divisor de la Recomendación 1) tensión en GPIO26 con ECHO en alto | ≤ 3,4 V | | |
 
 > El multímetro en DC muestra el **promedio** de un pulso, no su valor pico. Para C02 y C03 conviene un osciloscopio; si solo se tiene un multímetro, colocar el objeto lejos (pulso largo) e indicar en el informe que el valor es promedio y, por lo tanto, un límite inferior del pico.
 
@@ -1226,7 +1264,7 @@ _Completar con el análisis de los resultados de hardware: analizar en qué dist
 3. Las pruebas de software verificaron la lógica de RF1 a RF9 sin depender del hardware: 29/29 comprobaciones nativas del firmware, 14/14 pruebas del servidor con sockets reales y una simulación de punta a punta con el servidor como proceso independiente.
 4. El servidor procesó 6 000 mensajes durante 10 minutos sin errores, con una latencia p99 de 2,580 ms. Su aporte al tiempo de respuesta es despreciable frente al objetivo de 1 s.
 5. El filtro de lecturas inválidas conserva la histéresis ante lecturas falsas aisladas del HC-SR04, lo que se verificó a nivel lógico con las pruebas automatizadas.
-6. El montaje del sensor mantiene ECHO conectado directamente a un GPIO de 3,3 V. El análisis de §2.3.2 muestra que el pin trabaja fuera de la especificación del ESP32 (≈ 5 V frente a 3,6 V como máximo), aunque el sistema funcione. Es un riesgo conocido y documentado, y su corrección con un divisor de 1 kΩ/2 kΩ no requiere cambios en el software.
+6. El montaje del sensor mantiene ECHO conectado directamente a un GPIO de 3,3 V. El pin trabaja fuera de la especificación del ESP32 (≈ 5 V frente a 3,6 V como máximo), aunque el sistema funcione. Es un riesgo conocido y documentado, y su corrección con un divisor de 1 kΩ/2 kΩ no requiere cambios en el software.
 7. La detección de fallos depende del cierre de la conexión TCP. Por eso, una caída abrupta del sensor (corte de energía) no se detecta y el actuador conservaría el último estado. Es la principal limitación del diseño actual.
 8. _Completar con las conclusiones de las pruebas de hardware (exactitud, tiempo de respuesta de extremo a extremo, estabilidad y reconexión)._
 
@@ -1234,7 +1272,18 @@ _Completar con el análisis de los resultados de hardware: analizar en qué dist
 
 # 7. Recomendaciones
 
-1. **Adaptar el nivel de ECHO antes de seguir usando el prototipo** (riesgo R1, la mejora más urgente). Instalar el divisor de 1 kΩ en serie y 2 kΩ a GND (opción A de §2.3.2), repetir PH-01 (caso C07) y PH-03 para confirmar que la exactitud no cambia. Si se compran componentes nuevos, usar un HC-SR04P de 3,3 V.
+1. **Adaptar el nivel de ECHO a 3,3 V** (riesgo R1, la mejora más urgente). El HC-SR04 se alimenta a 5 V y su pin ECHO entrega pulsos de ≈ 5 V, que en el prototipo llegan directo al GPIO26. Los GPIO del ESP32 no toleran 5 V: el máximo absoluto es VDD + 0,3 V ≈ 3,6 V. El sistema funciona porque el diodo interno de protección del pin limita la tensión a ≈ 3,9 V, pero ese diodo está diseñado para descargas breves y no para conducir en cada medición, por lo que el pin puede degradarse con el uso. La corrección más simple es un divisor resistivo, que no requiere cambios en el software:
+
+   ```text
+      HC-SR04 ECHO (5 V) ──[ 1 kΩ ]──┬──► GPIO26  (≈ 3,33 V)
+                                     │
+                                  [ 2 kΩ ]
+                                     │
+                                    GND
+      V(GPIO26) = 5 V × 2 kΩ / (1 kΩ + 2 kΩ) ≈ 3,33 V
+   ```
+
+   Después de instalarlo, repetir PH-01 (caso C07) y PH-03 para confirmar que la exactitud no cambia. Si se compran componentes nuevos, una alternativa es usar un HC-SR04P, que funciona a 3,3 V.
 2. **Agregar un tiempo máximo sin datos en el servidor.** Configurar en `AtencionCliente.setup()` un `timeout` del socket de ≈ 1 s (≈ 10 periodos de medición) para que, si el sensor deja de enviar sin cerrar la conexión, se ejecute `desconectar()` y se apaguen los LEDs. Como alternativa, activar `SO_KEEPALIVE`. Esto resuelve la limitación de la conclusión 7.
 3. **Desactivar el algoritmo de Nagle** en ambos extremos (`_conexion.setNoDelay(true)` en `ClienteTCP` y `TCP_NODELAY` en el servidor). Con mensajes pequeños y frecuentes, Nagle combinado con el ACK retardado puede agregar hasta ≈ 200 ms de retraso en algunos mensajes. Medir PH-07 con y sin este cambio.
 4. **No guardar las credenciales WiFi en el repositorio.** `ConfigRed.h` contiene el SSID y la clave reales. Conviene moverlos a un archivo `Secretos.h` excluido en `.gitignore`, con un `Secretos.ejemplo.h` versionado.
