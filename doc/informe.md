@@ -8,17 +8,8 @@
 | **Repositorio** | https://github.com/Alous12/Proyecto_2_IOT |
 | **Fecha** | Octubre de 2026 |
 
-**Integrantes**
-
-| Integrante | Cuenta de GitHub | Responsabilidad principal |
-| --- | --- | --- |
-| Alejandro Machaca | `alous12` | _Completar_ |
-| Rubén Cordero | _Completar_ (autor de commits: Rubén Cordero) | _Completar_ |
-| Luciana Leaño | `lucianaaaaaaa` | _Completar_ |
 
 El trabajo se organizó en ramas por módulo (`Sensor`, `leds` y `server`), que luego se integraron en `main`. El historial de commits de cada rama respalda el aporte individual.
-
-> **Observaciones de la Práctica 1:** el [Anexo E](#anexo-e--atención-a-las-observaciones-de-la-revisión-de-la-práctica-1) detalla cómo se atendió cada observación de la revisión anterior y dónde verificarlo.
 
 ---
 
@@ -46,8 +37,6 @@ El sistema es distribuido y tiene tres nodos conectados a la misma red WiFi (IEE
 Los objetos no se comunican directamente entre sí: toda la información pasa por el servidor. El actuador no conoce los rangos de distancia y el sensor no conoce los LEDs; la decisión está concentrada en un solo lugar.
 
 ## 1.1 Requerimientos funcionales
-
-RF1 a RF4 son los exigidos por la práctica. RF5 a RF9 son requerimientos que el grupo agregó para que el sistema distribuido sea robusto ante fallas de red, de sensor y de protocolo.
 
 | ID | Requerimiento | Criterio de aceptación |
 | --- | --- | --- |
@@ -85,9 +74,9 @@ Para evitar el parpadeo cuando el objeto está justo sobre un límite, se usa un
 | `LEJANO` | d ≥ 38 cm | d < 38 cm → se reclasifica con los límites base |
 | `ERROR` | — | La siguiente lectura válida se clasifica directamente con 20 y 40 cm |
 
-### 1.1.3 Filtro de lecturas inválidas (mejora respecto a la Práctica 1)
+### 1.1.3 Filtro de lecturas inválidas
 
-En la Práctica 1, una sola lectura inválida llevaba el sistema a `ERROR`, y la lectura siguiente se clasificaba **sin histéresis**. Esa es la causa más probable de la falla H04 (oscilación amarillo/verde cerca de 40 cm). En esta versión, una lectura inválida solo cambia el rango si se repite **3 veces seguidas**. Mientras tanto se conserva el último rango válido, y con él la memoria de la histéresis. Cualquier lectura válida reinicia el conteo. A 10 lecturas por segundo, el sistema tarda unos 0,3 s en pasar a `ERROR`.
+El HC-SR04 produce lecturas inválidas aisladas (sin eco o con valores falsos). Si una sola de ellas llevara el sistema a `ERROR`, los LEDs se apagarían por un instante y, además, la lectura siguiente se clasificaría **sin histéresis**, porque después de `ERROR` se usan los límites base. Cerca de 40 cm, eso produciría una oscilación amarillo/verde. Por eso, una lectura inválida solo cambia el rango si se repite **3 veces seguidas**. Mientras tanto se conserva el último rango válido, y con él la memoria de la histéresis. Cualquier lectura válida reinicia el conteo. A 10 lecturas por segundo, el sistema tarda unos 0,3 s en pasar a `ERROR`.
 
 ## 1.2 Requerimientos no funcionales
 
@@ -102,9 +91,8 @@ Los valores son objetivos medibles. Su verificación está en la sección 4.
 | **RNF5** | Latencia del servidor | Procesamiento `POST` → `SET` **≤ 50 ms en el percentil 99**. | Medición automatizada de 10 min (PS-04). |
 | **RNF6** | Recuperación | Tras restablecer el servidor, ambos clientes se reconectan y el sistema vuelve a operar en **≤ 10 s**. | Prueba de reinicio del servidor (PH-08). |
 | **RNF7** | Detección de fallos | Los LEDs se apagan en **≤ 1 s** después de perder el objeto (lecturas inválidas) o de desconectarse el sensor de forma ordenada. | Pruebas PS-05 y PH-08. |
-| **RNF8** | Seguridad eléctrica | Ninguna entrada del ESP32 recibe más de su máximo absoluto (**≤ 3,6 V**), y la corriente de cada LED es **≤ 12 mA**. | Análisis de niveles (§2.3), cálculo de corriente y medición con multímetro (PH-01). |
-| **RNF9** | Calidad del código | Código modular (POO), documentado y conforme a las convenciones; compila **sin advertencias**. | Compilación, pruebas automatizadas y revisión estática (PS-01, PS-02, PS-06). |
-| **RNF10** | Uso de recursos | Cada firmware usa **≤ 25 % de RAM** y **≤ 70 % de flash** del ESP32. | Informe de memoria de PlatformIO (PS-01). |
+| **RNF8** | Calidad del código | Código modular (POO), documentado y conforme a las convenciones; compila **sin advertencias**. | Compilación, pruebas automatizadas y revisión estática (PS-01, PS-02, PS-06). |
+| **RNF9** | Uso de recursos | Cada firmware usa **≤ 25 % de RAM** y **≤ 70 % de flash** del ESP32. | Informe de memoria de PlatformIO (PS-01). |
 
 ## 1.3 Matriz de trazabilidad
 
@@ -126,9 +114,8 @@ Los valores son objetivos medibles. Su verificación está en la sección 4.
 | **RNF5** | Servidor sin espera activa, con bloqueo corto | `ServidorTCP.publicar()`, `threading.Lock` | PS-04 |
 | **RNF6** | Reintento periódico | `REINTENTO_CONEXION_MS = 3000` | PH-08 |
 | **RNF7** | Filtro de 3 lecturas y aviso por desconexión | `ControlDistancia`, `ServidorTCP.desconectar()` | PS-05, PH-08 |
-| **RNF8** | Resistencias de 220 Ω; nivel de ECHO analizado (riesgo R1) | §2.3, §2.3.2 | PH-01 |
-| **RNF9** | Clases con responsabilidad única, comentarios y docstrings | Todos los archivos de [`src/`](../src) | PS-01, PS-02, PS-06 |
-| **RNF10** | Firmware separado por objeto | `build_src_filter` en [`platformio.ini`](../platformio.ini) | PS-01 |
+| **RNF8** | Clases con responsabilidad única, comentarios y docstrings | Todos los archivos de [`src/`](../src) | PS-01, PS-02, PS-06 |
+| **RNF9** | Firmware separado por objeto | `build_src_filter` en [`platformio.ini`](../platformio.ini) | PS-01 |
 
 ---
 
@@ -196,7 +183,7 @@ flowchart LR
 
 ### 2.2.2 Decisión: el algoritmo de control vive solo en el servidor
 
-En la Práctica 1 la clasificación se hacía en el ESP32. Ahora se trasladó al servidor y **se eliminó del cliente**, de modo que haya una única fuente de verdad para los umbrales y la histéresis. Esto permite cambiar las reglas sin reprogramar las placas y cumple el enunciado ("el servidor deberá ejecutar un algoritmo de control").
+La clasificación se ejecuta **solo en el servidor**; los clientes no contienen ninguna regla de rangos. Así hay una única fuente de verdad para los umbrales y la histéresis. Esto permite cambiar las reglas sin reprogramar las placas y cumple el enunciado ("el servidor deberá ejecutar un algoritmo de control").
 
 El sensor solo descarta lo que es **físicamente imposible** para el HC-SR04 (< 2 cm o > 400 cm). El **rango de trabajo** (2–200 cm) es una regla de negocio y la aplica el servidor. Por eso hay dos validaciones con límites distintos, pero con propósitos diferentes y documentados.
 
@@ -234,7 +221,7 @@ Los diagramas representan el **montaje real utilizado en el prototipo**. Ambos E
 | HC-SR04 VCC | Pin 5V/VIN del ESP32 | El módulo requiere 5 V para funcionar. |
 | HC-SR04 GND | GND común | Referencia común de tensión. |
 | HC-SR04 TRIG | GPIO25 | 3,3 V supera el umbral de entrada alta del HC-SR04; no requiere adaptación. |
-| HC-SR04 ECHO | **Directo** a GPIO26 | Se mantuvo el montaje de la Práctica 1. **No cumple el límite de tensión del ESP32**: ver el análisis siguiente. |
+| HC-SR04 ECHO | **Directo** a GPIO26 | Montaje utilizado en el prototipo. **No cumple el límite de tensión del ESP32**: ver el análisis siguiente. |
 
 ### 2.3.2 Análisis del nivel de ECHO (riesgo R1)
 
@@ -248,9 +235,9 @@ Los diagramas representan el **montaje real utilizado en el prototipo**. Ambos E
 | Elevación del riel de 3,3 V | La corriente inyectada sube el riel, lo que puede afectar al resto del chip, incluida la radio WiFi. |
 | Falla definitiva del pin | Es el peor caso. Con el pin dañado, `pulseIn()` devuelve 0 y todas las lecturas pasan a `invalida`. |
 
-**Por qué el prototipo funciona igual.** El diodo de protección mantiene la tensión del pin cerca de un nivel que el ESP32 interpreta como alto, y el pulso dura poco. Con objeto, ECHO está en alto ≤ 11,7 ms por cada ciclo de ≈ 110 ms (≤ 11 % del tiempo). Sin objeto, puede llegar a ≈ 30 % por el timeout. Esto explica que el sistema haya funcionado en la Práctica 1 y en esta práctica. Pero que **funcione no significa que sea seguro**: el pin opera fuera de especificación y su vida útil no está garantizada.
+**Por qué el prototipo funciona igual.** El diodo de protección mantiene la tensión del pin cerca de un nivel que el ESP32 interpreta como alto, y el pulso dura poco. Con objeto, ECHO está en alto ≤ 11,7 ms por cada ciclo de ≈ 110 ms (≤ 11 % del tiempo). Sin objeto, puede llegar a ≈ 30 % por el timeout. Esto explica que el prototipo funcione. Pero que **funcione no significa que sea seguro**: el pin opera fuera de especificación y su vida útil no está garantizada.
 
-**Decisión del grupo.** Para esta entrega se mantuvo el montaje de la Práctica 1, que es el que se usó en todas las pruebas. El riesgo se **documenta y se acepta de forma temporal**, se registra como incumplimiento de RNF8 en §4.7 y su corrección es la primera recomendación (§7). La medición PH-01 cuantifica la tensión real en el pin.
+**Decisión del grupo.** Para esta entrega se mantuvo el montaje con ECHO directo, que es el que se usó en todas las pruebas. El riesgo se **documenta y se acepta de forma temporal**, y su corrección es la primera recomendación (§7). La verificación del montaje (PH-01) incluye, como dato complementario, la tensión real en el pin.
 
 **Corrección propuesta (sin cambios en el software).** Cualquiera de estas opciones lleva la señal a niveles seguros:
 
@@ -293,7 +280,7 @@ Esquema de la opción A:
 | Amarillo | GPIO27 | ≈ 2,1 V | ≈ 5,5 mA |
 | Verde | GPIO14 | ≈ 2,2 V | ≈ 5,0 mA |
 
-Las tres corrientes están por debajo de 12 mA (RNF8) y muy por debajo del máximo de 40 mA por GPIO del ESP32. Como el sistema enciende un solo LED a la vez, el consumo de la salida es de ≈ 6 mA como máximo.
+Las tres corrientes son del orden de 5–6 mA, muy por debajo del máximo de 40 mA por GPIO del ESP32. Como el sistema enciende un solo LED a la vez, el consumo de la salida es de ≈ 6 mA como máximo.
 
 ## 2.4 Diagrama de clases
 
@@ -571,14 +558,14 @@ Sensor                         Servidor                         Actuador
 | Decisión | Justificación | Riesgo o costo asumido |
 | --- | --- | --- |
 | Algoritmo de control solo en el servidor | Una sola fuente de verdad; las reglas se cambian sin reprogramar. | Si el servidor cae, no hay control (se mitiga con el fallo seguro). |
-| Filtro de 3 lecturas inválidas | Corrige la causa de H04 de la Práctica 1 y evita apagones de un ciclo. | Retirar el objeto se detecta con ≈ 0,3 s de retraso. |
+| Filtro de 3 lecturas inválidas | Conserva la histéresis ante lecturas falsas aisladas y evita apagones de un ciclo. | Retirar el objeto se detecta con ≈ 0,3 s de retraso. |
 | Histéresis de 2 cm | Elimina el parpadeo en los límites. | Hay que alejar el objeto 2 cm más para confirmar un cambio. |
 | Un `SET` por cada `POST` | Resincronización continua; no se necesitan confirmaciones. | Tráfico constante, aunque pequeño. |
 | `WiFi.setSleep(false)` | Reduce la latencia de la radio (sin el ciclo de ahorro de energía). | Mayor consumo de las placas. |
 | IP fijas | El sensor y el actuador encuentran siempre al servidor; los diagnósticos son reproducibles. | Hay que ajustar `ConfigRed.h` a cada red; `USAR_IP_FIJA = false` permite DHCP. |
 | `ThreadingTCPServer` con `Lock` | Un hilo por cliente; un cliente lento no bloquea a los demás. El bloqueo protege el estado compartido. | Escala a pocos clientes, suficiente para el alcance. |
 | Sin almacenar lecturas mientras no hay conexión | Un dato de distancia viejo no sirve para el control en tiempo real. | Se pierden las lecturas del periodo desconectado. |
-| ECHO conectado directo a GPIO26 (montaje de la Práctica 1) | Es el montaje con el que se hicieron todas las pruebas; no requiere componentes adicionales. | **Riesgo R1:** ≈ 5 V en un pin de 3,3 V, fuera de especificación (§2.3.2). Ver Recomendación 1. |
+| ECHO conectado directo a GPIO26 | Es el montaje con el que se hicieron todas las pruebas; no requiere componentes adicionales. | **Riesgo R1:** ≈ 5 V en un pin de 3,3 V, fuera de especificación (§2.3.2). Ver Recomendación 1. |
 | Detección de desconexión basada en TCP | No requiere mensajes adicionales. | **Una caída abrupta del sensor (corte de energía) no cierra el socket**: el servidor no lo detecta y el actuador conserva el último LED. Ver Recomendación 2. |
 
 ---
@@ -726,7 +713,7 @@ def actualizar(self, distancia):
 
 ### 3.6.1 `IndicadorLeds`
 
-Recibe los pines por constructor (GPIO13, 27 y 14 por defecto), igual que el sensor. Así se corrige una observación de la Práctica 1. `procesarComando()` exige el prefijo `SET ` y los tres valores; si cualquiera falta o no es exactamente `on`/`off`, devuelve `false` **sin tocar los LEDs**:
+Recibe los pines por constructor (GPIO13, 27 y 14 por defecto), igual que el sensor, de modo que ninguna clase tiene pines fijos en su código. `procesarComando()` exige el prefijo `SET ` y los tres valores; si cualquiera falta o no es exactamente `on`/`off`, devuelve `false` **sin tocar los LEDs**:
 
 ```cpp
 bool rojo, amarillo, verde;
@@ -837,13 +824,13 @@ Una prueba se marca como aprobada solo si cumple su criterio de aceptación. Los
 
 | ID | Tipo | Requisitos | Objetivo | Estado |
 | --- | --- | --- | --- | --- |
-| PS-01 | Compilación | RNF9, RNF10 | Compilar desde cero los firmwares `sensor` y `actuador`. | **Aprobada** |
+| PS-01 | Compilación | RNF8, RNF9 | Compilar desde cero los firmwares `sensor` y `actuador`. | **Aprobada** |
 | PS-02 | Automatizada nativa (C++) | RF1, RF3, RF9 | Probar `SensorUltrasonico` e `IndicadorLeds` con GPIO y eco simulados. | **Aprobada: 29/29** |
 | PS-03 | Automatizada (Python) | RF2, RF3, RF4, RF5, RF6, RF7, RF9 | Pruebas unitarias del algoritmo y de integración por TCP. | **Aprobada: 14/14** |
 | PS-04 | Rendimiento automatizado | RNF5, RNF1 (servidor), RNF4 (servidor) | Medir la latencia `POST` → `SET` y la estabilidad del servidor durante 10 min. | **Aprobada** |
 | PS-05 | Simulación de punta a punta | RF4, RF5, RF6, RNF7 | Ejecutar `server.py` como proceso real, con el sensor y el actuador simulados. | **Aprobada** |
-| PS-06 | Revisión estática | RNF9 | Comprobar la modularidad, la documentación y la coherencia de la configuración. | **Aprobada con observaciones: 7/8** |
-| PH-01 | Hardware | RNF8 | Verificar las conexiones y cuantificar la tensión real de ECHO en GPIO26 (riesgo R1). | _Pendiente_ |
+| PS-06 | Revisión estática | RNF8 | Comprobar la modularidad, la documentación y la coherencia de la configuración. | **Aprobada con observaciones: 7/8** |
+| PH-01 | Hardware | RF1, RF3 | Verificar que las conexiones coincidan con §2.3 y registrar los niveles de tensión (riesgo R1). | _Pendiente_ |
 | PH-02 | Hardware + red | RF4, RF5 | Verificar la conexión WiFi/TCP y el registro de ambas placas. | _Pendiente_ |
 | PH-03 | Experimental | RF1, RNF2 | Exactitud del sensor frente a la cinta métrica. | _Pendiente_ |
 | PH-04 | Experimental | RF2, RF3 | Correspondencia distancia → LED, incluidos los límites. | _Pendiente_ |
@@ -870,7 +857,7 @@ Las pruebas de software se ejecutaron el **10 de octubre de 2026** en la PC de d
 
 **Procedimiento:** `pio run -t clean` seguido de `pio run`, desde la raíz del proyecto.
 
-**Criterio de aceptación:** ambos entornos terminan con `SUCCESS`, sin errores ni advertencias del código propio. RAM ≤ 25 % y flash ≤ 70 % (RNF10).
+**Criterio de aceptación:** ambos entornos terminan con `SUCCESS`, sin errores ni advertencias del código propio. RAM ≤ 25 % y flash ≤ 70 % (RNF9).
 
 | Entorno | Estado | Tiempo | RAM | Flash | Advertencias |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -918,7 +905,7 @@ Las pruebas de integración levantan el `ServidorTCP` real en `127.0.0.1` con un
 | Clasificación | `test_histeresis_original` | 10 transiciones: 21,99/22 desde CERCANO, 18/17,99 y 41,99/42 desde MEDIO, 38/37,99 desde LEJANO, saltos largos | RF2 | ok |
 | Clasificación | `test_luces_fijas` | Comando `SET` exacto para los 4 rangos | RF3, RF4 | ok |
 | Clasificación | `test_interpretar_mensaje` | Análisis de `REGISTER`, `POST`, `SET` y un mensaje sin argumentos | RF4 | ok |
-| Filtro | `test_lectura_invalida_aislada_no_cambia_el_rango` | `39.77 → 204.12 → 39.77 → None → 38.91` se mantiene en MEDIO (**caso H04 de la Práctica 1**) | RF6 | ok |
+| Filtro | `test_lectura_invalida_aislada_no_cambia_el_rango` | `39.77 → 204.12 → 39.77 → None → 38.91` se mantiene en MEDIO (lecturas falsas aisladas cerca del límite de 40 cm) | RF6 | ok |
 | Filtro | `test_lecturas_invalidas_seguidas_pasan_a_error` | La 3.ª inválida seguida produce ERROR; las anteriores conservan CERCANO | RF6 | ok |
 | Filtro | `test_lectura_valida_reinicia_el_conteo` | 5 ciclos de 2 inválidas + 1 válida no llegan a ERROR | RF6 | ok |
 | Filtro | `test_inicia_en_error` | El estado inicial es ERROR | RF6 | ok |
@@ -999,7 +986,7 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 **Condiciones de ensayo:**
 
 - Espacio interior, sin obstáculos dentro del cono de ≈ 15° del sensor.
-- Objeto plano y **perpendicular** al eje del sensor. No usar objetos esféricos ni irregulares (observación de la Práctica 1).
+- Objeto plano y **perpendicular** al eje del sensor. No usar objetos esféricos ni irregulares, porque dispersan el eco.
 - Distancia medida desde la cara frontal de los transductores.
 - Firewall de la PC con el puerto TCP 5000 permitido.
 - Registrar en el informe: la temperatura ambiente aproximada, la red WiFi usada y la distancia de las placas al punto de acceso.
@@ -1015,6 +1002,8 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 > Las tablas siguientes deben completarse con los valores observados. Si una prueba no cumple, se registra igual y se analiza la causa en la sección 5.
 
 ### 4.6.1 PH-01 — Verificación del circuito y del nivel de ECHO
+
+**Objetivo:** confirmar que el montaje coincide con los diagramas de §2.3. Las mediciones de ECHO (C02–C04) no son un criterio de aprobación: son datos complementarios que cuantifican el riesgo R1 analizado en §2.3.2.
 
 | Caso | Medición | Esperado | Medido | Estado |
 | --- | --- | --- | --- | --- |
@@ -1041,7 +1030,7 @@ En el paso 4, el primer `POST distance=invalida` se envió ≈ 4,06 s después d
 
 ### 4.6.3 PH-03 — Exactitud del sensor
 
-**Procedimiento:** en cada referencia, esperar a que la lectura se estabilice y registrar **10 lecturas consecutivas** del monitor serie del sensor. Calcular el promedio, la desviación estándar y el **error individual máximo** `max|lectura − referencia|`. El criterio de RNF2 se evalúa sobre el error individual, no sobre el promedio (observación de la Práctica 1).
+**Procedimiento:** en cada referencia, esperar a que la lectura se estabilice y registrar **10 lecturas consecutivas** del monitor serie del sensor. Calcular el promedio, la desviación estándar y el **error individual máximo** `max|lectura − referencia|`. El criterio de RNF2 se evalúa sobre el error individual, no sobre el promedio, porque el promedio oculta las desviaciones de cada lectura.
 
 | Referencia | Mínima | Máxima | Promedio | Desv. estándar | Error del promedio | **Error individual máx.** | Estado (≤ 3 cm) |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -1083,13 +1072,13 @@ Mover el objeto lentamente, ≈ 2 s por posición, y anotar el color después de
 | H01 | CERCANO | 19 → 21 → 19 → 21 cm | Permanece rojo | | |
 | H02 | CERCANO | 21 → 23 cm | Rojo y luego amarillo | | |
 | H03 | MEDIO | 20 → 19 → 18 → 17 cm | Amarillo hasta 18 cm; rojo en 17 cm | | |
-| **H04** | MEDIO | 39 → 41 → 39 → 41 cm | **Permanece amarillo** (falló en la Práctica 1) | | |
+| **H04** | MEDIO | 39 → 41 → 39 → 41 cm | **Permanece amarillo** | | |
 | H05 | MEDIO | 41 → 43 cm | Amarillo y luego verde | | |
 | H06 | LEJANO | 40 → 39 → 38 → 37 cm | Verde hasta 38 cm; amarillo en 37 cm | | |
 | H07 | Cualquiera válido | Retirar el objeto (sin eco) | Se apaga en ≤ 1 s (RNF7) | | |
 | H08 | MEDIO a 41 cm | Pasar la mano rápido frente al sensor (≈ 1 lectura falsa) | Permanece amarillo, sin apagarse | | |
 
-Para H04, guardar también el registro del monitor serie del sensor (lecturas entre 38 y 42 cm) en el Anexo C. Ese registro permite confirmar o descartar que la causa en la Práctica 1 eran las lecturas inválidas aisladas.
+Para H04, guardar también el registro del monitor serie del sensor (lecturas entre 38 y 42 cm) en el Anexo C. Si hubiera una oscilación, ese registro permite saber si la causaron lecturas inválidas aisladas o una dispersión del sensor mayor que el margen de histéresis.
 
 ### 4.6.6 PH-06 — Frecuencia de muestreo
 
@@ -1186,9 +1175,8 @@ Las transiciones hacia `ERROR` (repetición 9) suman ≈ 0,2–0,3 s adicionales
 | **RNF5** | PS-04 (p99 = 2,580 ms ≤ 50 ms) | **Cumple** |
 | **RNF6** | PH-08 | _Pendiente_ |
 | **RNF7** | PS-05 (≈ 0,2 s); PH-05, PH-08 | Software: **cumple**. Hardware: _pendiente_ |
-| **RNF8** | Cálculo de §2.3 (LEDs ≤ 5,9 mA); análisis de §2.3.2 (ECHO ≈ 5 V); PH-01 | LEDs: **cumple**. ECHO: **no cumple en el montaje actual** (riesgo R1 documentado; corrección propuesta en §2.3.2 y Recomendación 1) |
-| **RNF9** | PS-01 (0 advertencias), PS-02 (`-Werror`), PS-06 (7/8) | **Cumple**, con la observación E08 |
-| **RNF10** | PS-01 (RAM 13,7 %, flash 57,0 %) | **Cumple** |
+| **RNF8** | PS-01 (0 advertencias), PS-02 (`-Werror`), PS-06 (7/8) | **Cumple**, con la observación E08 |
+| **RNF9** | PS-01 (RAM 13,7 %, flash 57,0 %) | **Cumple** |
 
 ---
 
@@ -1219,7 +1207,7 @@ Las transiciones hacia `ERROR` (repetición 9) suman ≈ 0,2–0,3 s adicionales
 
 **Algoritmo y protocolo.** La lógica de control y el protocolo se verificaron con sockets reales, mensajes fragmentados, valores límite exactos (19,99/20; 39,99/40; 21,99/22; 41,99/42; 200/200,01) y mensajes malformados, que son difíciles de reproducir de forma controlada con el HC-SR04. Todos los casos coincidieron con la especificación de §1.1.
 
-**Corrección de la falla H04 de la Práctica 1.** La revisión anterior identificó que una lectura inválida aislada llevaba el sistema a `ERROR` y borraba la histéresis, de modo que la lectura siguiente (39 o 41 cm) se clasificaba con los límites base. La prueba `test_lectura_invalida_aislada_no_cambia_el_rango` reproduce exactamente esa secuencia (`39.77 → 204.12 → 39.77 → None → 38.91`) y ahora el resultado se mantiene en `MEDIO`. Queda por confirmar en el hardware con H04 y H08 (PH-05).
+**Lecturas inválidas y histéresis.** Sin el filtro, una lectura inválida aislada llevaría el sistema a `ERROR` y borraría la histéresis, de modo que la lectura siguiente (39 o 41 cm) se clasificaría con los límites base. La prueba `test_lectura_invalida_aislada_no_cambia_el_rango` reproduce esa situación (`39.77 → 204.12 → 39.77 → None → 38.91`) y el resultado se mantiene en `MEDIO`. Queda por confirmar en el hardware con H04 y H08 (PH-05).
 
 **Rendimiento del servidor.** Con 6 000 mensajes en 10 minutos, la latencia media fue de 0,784 ms y el percentil 99 de 2,580 ms. En el 99 % de los mensajes, el servidor consume como máximo el 0,26 % del presupuesto de 1 s de RNF3, y el tiempo de respuesta queda dominado por el periodo de medición (≤ 131 ms) y por la red WiFi. Solo 9 de 6 000 mensajes (0,15 %) superaron los 10 ms, y uno solo llegó a 50,826 ms. Por su rareza, lo más probable es que se deban a la planificación de hilos de Windows o a la recolección de memoria de Python y no al algoritmo; aun en ese caso quedan muy por debajo de 1 s.
 
@@ -1227,7 +1215,7 @@ Las transiciones hacia `ERROR` (repetición 9) suman ≈ 0,2–0,3 s adicionales
 
 **Recursos.** Ambos firmwares usan ≈ 57 % de la flash, sobre todo por la pila WiFi. Queda margen para agregar funciones como un filtro de mediana o mensajes de latido.
 
-_Completar con el análisis de los resultados de hardware: comparar la exactitud con la de la Práctica 1 (máximo de 1,63 cm en el promedio), la frecuencia real con la teórica (§3.3.2), el tiempo de extremo a extremo con el presupuesto de PH-07, y el resultado de H04._
+_Completar con el análisis de los resultados de hardware: analizar en qué distancias aparece el mayor error, comparar la frecuencia real con la teórica (§3.3.2), el tiempo de extremo a extremo con el presupuesto de PH-07, y el resultado de H04._
 
 ---
 
@@ -1237,8 +1225,8 @@ _Completar con el análisis de los resultados de hardware: comparar la exactitud
 2. El algoritmo de control (tres rangos contiguos, histéresis de 2 cm y filtro de 3 lecturas inválidas) se concentró en el servidor. Esto eliminó la lógica duplicada en las placas: el actuador no conoce distancias y el sensor no conoce los LEDs.
 3. Las pruebas de software verificaron la lógica de RF1 a RF9 sin depender del hardware: 29/29 comprobaciones nativas del firmware, 14/14 pruebas del servidor con sockets reales y una simulación de punta a punta con el servidor como proceso independiente.
 4. El servidor procesó 6 000 mensajes durante 10 minutos sin errores, con una latencia p99 de 2,580 ms. Su aporte al tiempo de respuesta es despreciable frente al objetivo de 1 s.
-5. El filtro de lecturas inválidas resuelve, a nivel lógico, la causa identificada de la falla H04 de la Práctica 1.
-6. El montaje del sensor mantiene ECHO conectado directamente a un GPIO de 3,3 V. El análisis de §2.3.2 muestra que el pin trabaja fuera de la especificación del ESP32 (≈ 5 V frente a 3,6 V como máximo), aunque el sistema funcione. Es un incumplimiento de RNF8, conocido y documentado, y su corrección con un divisor de 1 kΩ/2 kΩ no requiere cambios en el software.
+5. El filtro de lecturas inválidas conserva la histéresis ante lecturas falsas aisladas del HC-SR04, lo que se verificó a nivel lógico con las pruebas automatizadas.
+6. El montaje del sensor mantiene ECHO conectado directamente a un GPIO de 3,3 V. El análisis de §2.3.2 muestra que el pin trabaja fuera de la especificación del ESP32 (≈ 5 V frente a 3,6 V como máximo), aunque el sistema funcione. Es un riesgo conocido y documentado, y su corrección con un divisor de 1 kΩ/2 kΩ no requiere cambios en el software.
 7. La detección de fallos depende del cierre de la conexión TCP. Por eso, una caída abrupta del sensor (corte de energía) no se detecta y el actuador conservaría el último estado. Es la principal limitación del diseño actual.
 8. _Completar con las conclusiones de las pruebas de hardware (exactitud, tiempo de respuesta de extremo a extremo, estabilidad y reconexión)._
 
@@ -1252,7 +1240,7 @@ _Completar con el análisis de los resultados de hardware: comparar la exactitud
 4. **No guardar las credenciales WiFi en el repositorio.** `ConfigRed.h` contiene el SSID y la clave reales. Conviene moverlos a un archivo `Secretos.h` excluido en `.gitignore`, con un `Secretos.ejemplo.h` versionado.
 5. **Evaluar un filtro de mediana de 3 o 5 lecturas en el servidor** si PH-05 muestra oscilaciones residuales cerca de 20 o 40 cm. No agrega retraso perceptible a 10 lecturas/s.
 6. **Corregir las 3 líneas de más de 99 caracteres de `server.py` (E08)** agregar docstrings a `principal()` y a los constructores, y comentar en `ClienteTCP.h` qué devuelve `enviarLinea()` (en caso de falla cierra la conexión). Incorporar un verificador (`flake8`) al flujo de trabajo.
-7. **Automatizar las pruebas.** Ejecutar `pio run`, las pruebas nativas y `unittest` con GitHub Actions en cada *push*, para detectar regresiones como las de la Práctica 1.
+7. **Automatizar las pruebas.** Ejecutar `pio run`, las pruebas nativas y `unittest` con GitHub Actions en cada *push*, para detectar regresiones de forma temprana.
 8. **Agregar un mensaje de latido** (`PING`/`PONG`) en el protocolo si se agregan más objetos o si el servidor deja de enviar `SET` periódicos. Así cada extremo puede detectar la pérdida del otro sin esperar a TCP.
 9. Mantener las IP fijas para la demo, pero reservarlas por MAC en el router (o usar mDNS) para evitar conflictos con otros dispositivos de la red.
 
@@ -1530,44 +1518,3 @@ _Agregar las fotografías en `doc/anexos/` y enlazarlas aquí. En cada una deben
 | D.6 | PH-01 | Multímetro u osciloscopio midiendo ECHO en GPIO26 (riesgo R1) | _Pendiente_ |
 | D.7 | Montaje | Vista general de los dos objetos inteligentes y la PC con la consola del servidor | _Pendiente_ |
 | D.8 | PH-07 | Captura de los cuadros del video usados para medir el tiempo de respuesta | _Pendiente_ |
-
-## Anexo E — Atención a las observaciones de la revisión de la Práctica 1
-
-La revisión del informe de la Práctica 1 señaló las falencias de la tabla siguiente. Para cada una se indica cómo se atendió en esta práctica y dónde verificarlo.
-
-### E.1 Requerimientos, análisis y diseño
-
-| Observación de la Práctica 1 | Atención en la Práctica 2 | Dónde | Estado |
-| --- | --- | --- | --- |
-| ECHO a 5 V conectado directo al GPIO, sin ningún análisis | El montaje **sigue** con ECHO directo. Ahora el riesgo se analiza: niveles de cada señal, comportamiento del diodo de protección, por qué funciona igual, decisión del grupo, 4 alternativas de corrección y medición planificada. Se declara el incumplimiento de RNF8. | §2.3.2, §2.7, PH-01, §4.7, Conclusión 6, Recomendación 1 | **Analizado y documentado.** La corrección física está pendiente. |
-| El diagrama de circuito era un flujo de Mermaid, sin niveles de tensión, alimentación ni polaridad | Esquemas eléctricos por objeto, con alimentación USB, niveles en cada pin, ánodo/cátodo de los LEDs, GND común, una tabla de niveles por señal y el cálculo de corriente de los LEDs. | §2.3 | Atendido |
-| No se analizaba el efecto de `ERROR` sobre la histéresis | Se explica la interacción y se corrige con el filtro de 3 lecturas inválidas seguidas, que conserva el último rango y su histéresis. Hay un diagrama de estados. | §1.1.3, §2.5.2, §3.5.2 | Atendido |
-| El informe no tenía título, carátula ni integrantes | Encabezado con título, asignatura, repositorio, fecha e integrantes. | Inicio del informe | Atendido |
-
-### E.2 Desarrollo e implementación
-
-| Observación de la Práctica 1 | Atención en la Práctica 2 | Dónde | Estado |
-| --- | --- | --- | --- |
-| El código fuente no tenía comentarios | Comentario de clase en cada `.h`, contratos de los métodos no evidentes y docstrings en todo el servidor. Se verificó con la revisión estática y se informan los pocos métodos sin comentario. | §3.7, PS-06 (E06, E07) | Atendido |
-| La documentación de `MD/` estaba desactualizada y contradecía el código | Se eliminó `doc/funcionamiento.md`, que repetía contenido del informe. Su información vigente (configuración, ejecución y pruebas) se integró al informe. El informe es la **única** documentación técnica. | §3.8 | Atendido |
-| Configuración inconsistente: `IndicadorLeds` con pines fijos | `IndicadorLeds`, `SensorUltrasonico` y `ClienteTCP` reciben su configuración por constructor, con valores por defecto de `Config.h`/`ConfigRed.h`. | §3.6.1, PS-06 (E05) | Atendido |
-| El rango se validaba dos veces con límites distintos | La clasificación existe **solo** en el servidor. El sensor descarta lo físicamente imposible (2–400 cm) y el servidor aplica el rango de trabajo (2–200 cm). Se justifica la diferencia de propósito. | §2.2.2, PS-06 (E02) | Atendido |
-| `README.md` solo contenía el título | El README describe el sistema, enlaza el informe, muestra la estructura del repositorio y los comandos de uso. | [`README.md`](../README.md) | Atendido |
-
-### E.3 Pruebas y validaciones
-
-| Observación de la Práctica 1 | Atención en la Práctica 2 | Dónde | Estado |
-| --- | --- | --- | --- |
-| RNF3 (tiempo de respuesta) no se midió; se infirió del periodo de muestreo | La parte del servidor se **midió** (6 000 mensajes, p99 = 2,58 ms). Para el tiempo de extremo a extremo se definió un método con video en cámara lenta y 10 repeticiones (PH-07). La estimación teórica se presenta separada y rotulada como estimación. | PS-04, PH-07, §5.1 | Servidor: medido. Extremo a extremo: _pendiente_ |
-| El análisis de H04 no era coherente con los datos | Se identifica la causa (una inválida aislada borraba la histéresis), se reproduce en una prueba automatizada y se agregan H04 y H08 a las pruebas físicas, junto con el registro de las lecturas de 38–42 cm. | §1.1.3, PS-03, PH-05, §5.2 | Lógica: atendido. Físico: _pendiente_ |
-| No había registros crudos en el repositorio | Los registros de compilación, pruebas, simulación y latencia están en el Anexo A, y el script de medición en el Anexo B. Hay un espacio para los registros del hardware (Anexo C). | Anexos A, B y C | Software: atendido. Hardware: _pendiente_ |
-| Pocas muestras y error informado como promedio | 10 lecturas por punto y una columna explícita para el **error individual máximo**, que es el que se compara con ±3 cm. | PH-03 | Método atendido; _pendiente_ de ejecutar |
-| No se cumplieron las condiciones de ensayo (objeto esférico) | Las condiciones exigen un objeto plano y rígido, perpendicular al sensor, y advierten que no se usen objetos esféricos. | §4.5 | Atendido en el procedimiento |
-
-### E.4 Resultados, conclusiones y recomendaciones
-
-| Observación de la Práctica 1 | Atención en la Práctica 2 | Dónde | Estado |
-| --- | --- | --- | --- |
-| RNF3 presentado como cumplido sin aclarar que se infirió | Los resultados separan lo **medido** de lo **estimado**, y la validación consolidada indica qué parte de cada requisito está verificada. | §4.7, §5.1 | Atendido |
-| Las recomendaciones no trataban el nivel de ECHO | Es la Recomendación 1, con la solución concreta y las pruebas a repetir. | §7 | Atendido |
-| Algunas recomendaciones eran genéricas | Cada recomendación indica qué cambiar, en qué archivo o función y cómo verificarlo. | §7 | Atendido |
